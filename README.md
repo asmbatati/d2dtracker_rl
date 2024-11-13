@@ -19,6 +19,8 @@ This project requires the following dependencies:
 To initialize the simulation environment, run:
 ```bash
 ros2 launch d2dtracker_rl env.launch.py
+
+**### Step 1: Launch the Environment**
 Step 2: Start Training
 Once the environment is launched, initiate training by running:
 
