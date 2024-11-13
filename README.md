@@ -21,12 +21,14 @@ To initialize the simulation environment, run:
 
 ```bash
 ros2 launch d2dtracker_rl env.launch.py
+```
 
 ### Step 2: Start Training
 Once the environment is launched, initiate training by running:
 
 ```bash
 ros2 run d2dtracker_rl rl_node
+```
 
 ## Acknowledgments
 This work is part of the iHunter project under the Robotics & Internet of Things Lab (RIOTU) at Prince Sultan University.
