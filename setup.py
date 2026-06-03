@@ -26,6 +26,7 @@ setup(
         'console_scripts': [
             'train = d2dtracker_rl.train:main',
             'evaluate = d2dtracker_rl.evaluate:main',
+            'curriculum = d2dtracker_rl.curriculum:main',
         ],
     },
 )

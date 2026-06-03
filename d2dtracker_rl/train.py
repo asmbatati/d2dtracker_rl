@@ -44,6 +44,10 @@ def main(argv=None):
     parser.add_argument('--ckptdir', default='checkpoints')
     parser.add_argument('--init-from', default='',
                         help='load weights from a prior model (curriculum bootstrap)')
+    parser.add_argument('--target-policy', default='',
+                        help='override env target_policy (static|constant_velocity|evasive)')
+    parser.add_argument('--name', default='',
+                        help='run name -> runs/<name> and checkpoints/<name>')
     args, _ = parser.parse_known_args(argv)
 
     cfg = load_config(args.config)
@@ -51,12 +55,16 @@ def main(argv=None):
     algo_cfg = cfg.get('algo', {})
     algo_name = algo_cfg.pop('name', 'PPO' if args.stage == 'high' else 'SAC')
     total_timesteps = args.timesteps or algo_cfg.pop('total_timesteps', 100_000)
+    if args.target_policy:
+        env_cfg['target_policy'] = args.target_policy
+
+    run_name = args.name or args.stage
 
     rclpy.init()
     env = Monitor(ENVS[args.stage](config=env_cfg))
 
     algo_cls = ALGOS[algo_name]
-    tb = os.path.join(args.logdir, args.stage)
+    tb = os.path.join(args.logdir, run_name)
     if args.init_from and os.path.exists(args.init_from):
         model = algo_cls.load(args.init_from, env=env, tensorboard_log=tb)
         print(f'Loaded initial weights from {args.init_from}')
@@ -65,7 +73,7 @@ def main(argv=None):
 
     ckpt = CheckpointCallback(
         save_freq=max(total_timesteps // 20, 1000),
-        save_path=os.path.join(args.ckptdir, args.stage),
+        save_path=os.path.join(args.ckptdir, run_name),
         name_prefix='model')
 
     try:
@@ -74,7 +82,7 @@ def main(argv=None):
     except KeyboardInterrupt:
         print('Interrupted; saving current model.')
     finally:
-        out = os.path.join(args.ckptdir, args.stage, 'final_model')
+        out = os.path.join(args.ckptdir, run_name, 'final_model')
         model.save(out)
         print(f'Saved model to {out}.zip')
         env.close()

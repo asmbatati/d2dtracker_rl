@@ -1,0 +1,12 @@
+# Python deps for d2dtracker_rl (no apt packages on ROS 2 Jazzy).
+# Install into the ROS Python environment:
+#   pip install --user --break-system-packages -r requirements.txt
+# If torch raises "cannot import name 'equal_valued' from sympy", repair sympy:
+#   pip install --user --break-system-packages --force-reinstall --no-deps "sympy>=1.13"
+stable-baselines3>=2.3
+gymnasium>=0.29
+tensorboard
+torch
+numpy
+scipy
+pyyaml
