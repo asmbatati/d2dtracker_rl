@@ -1,34 +1,63 @@
 # d2dtracker_rl
 
-This repository contains reinforcement learning (RL) code for the iHunter project, developed as part of the Robotics & Internet of Things Lab (RIOTU) at Prince Sultan University. The RL module enables autonomous control of a drone in Gazebo Garden, with reinforcement learning algorithms implemented using Stable Baselines3 and Gymnasium. 
+Reinforcement-learning **drone-to-drone interception** for ROS 2 Jazzy +
+Gazebo Harmonic + PX4 SITL, using **Gymnasium** + **Stable-Baselines3**.
 
-The main repository for iHunter is located here: [d2dtracker_sim](https://github.com/mzahana/d2dtracker_sim).
+The interceptor learns to catch a target UAV with PX4 **in the loop** and the
+sim **rendered** (non-headless). A **curriculum** trains two action interfaces:
 
-## Dependencies
+| Stage | Env id | Action | Obs | Algo |
+|---|---|---|---|---|
+| 1 (primary) | `D2DIntercept-HighLevel-v0` | ENU velocity setpoint `Box(3)` | 13 | PPO |
+| 2 | `D2DIntercept-LowLevel-v0` | body rates + thrust `Box(4)` | 20 | SAC |
 
-This project requires the following dependencies:
-- **ROS 2 Humble**: Robot Operating System (ROS) framework for communication and control.
-- **Gazebo Garden**: Simulation environment for robotics applications.
-- **PX4**: Autopilot software to enable control of the drone.
-- **Stable Baselines3**: Library for state-of-the-art reinforcement learning algorithms.
-- **Gymnasium**: Interface for building and interacting with RL environments, compatible with Stable Baselines3.
+## Architecture
 
-## Usage
+- `ros_interface.py` — one rclpy node spun in a background thread; caches
+  interceptor/target odometry + FCU state, publishes setpoints, arms / sets mode.
+- `envs/base_intercept_env.py` — Gymnasium env; `step()` applies the action,
+  lets the sim advance one control tick, then reads fresh cached state for the
+  observation/reward (the fix over the old code, which never refreshed state).
+- `envs/high_level_env.py`, `envs/low_level_env.py` — the two action interfaces.
+- `px4_reset.py` — episode reset by teleporting both Gazebo entities
+  (`gz service .../set_pose`) + re-establishing armed/OFFBOARD, with a
+  land+rearm fallback.
+- `target_policy.py` — scripted target motion (static / constant-velocity /
+  evasive) for the curriculum.
+- `train.py`, `evaluate.py` — SB3 drivers.
 
-### Step 1: Launch the Environment
-
-To initialize the simulation environment, run:
+## Dependencies (pip — no apt package on Jazzy)
 
 ```bash
-ros2 launch d2dtracker_rl env.launch.py
+pip install --user --break-system-packages "stable-baselines3>=2.3" "gymnasium>=0.29" tensorboard
+# torch is required by SB3; if you hit a sympy `equal_valued` ImportError, run:
+pip install --user --break-system-packages --force-reinstall --no-deps "sympy>=1.13"
 ```
 
-### Step 2: Start Training
-Once the environment is launched, initiate training by running:
+## Run (two terminals — keep the sim up across training restarts)
 
 ```bash
-ros2 run d2dtracker_rl rl_node
+# Terminal A: bring up the rendered two-drone sim and wait for both FCUs
+ros2 launch drone_interception_sim interception.launch.py
+#   verify: ros2 topic echo /interceptor/mavros/state --once   (connected: true)
+
+# Terminal B: stage-1 training
+ros2 launch d2dtracker_rl train_high_level.launch.py
+tensorboard --logdir runs/
 ```
 
-## Acknowledgments
-This work is part of the iHunter project under the Robotics & Internet of Things Lab (RIOTU) at Prince Sultan University.
+Evaluate / visualise a trained policy live in Gazebo:
+
+```bash
+ros2 launch d2dtracker_rl evaluate.launch.py \
+    stage:=high model:=checkpoints/high/final_model.zip
+```
+
+## Curriculum
+
+`config/curriculum.yaml` lists progressively harder target behaviour
+(static → constant-velocity → evasive). Advance stages by editing
+`env.target_policy` in the train config, and bootstrap a stage from a prior
+checkpoint with `--init-from checkpoints/high/final_model.zip`. Stage 2
+(low-level) differs in obs/action dims, so it bootstraps behaviourally rather
+than by direct weight transfer (see plan notes).

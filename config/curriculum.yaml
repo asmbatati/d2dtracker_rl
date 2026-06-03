@@ -1,0 +1,28 @@
+# Curriculum definition: progressively harder target behaviour. Train each stage
+# in order, bootstrapping later stages from earlier checkpoints via --init-from.
+stages:
+  - name: high_static
+    env_stage: high
+    config: train_ppo_high_level.yaml
+    target_policy: static
+
+  - name: high_constant_velocity
+    env_stage: high
+    config: train_ppo_high_level.yaml
+    target_policy: constant_velocity
+    target_policy_params: {velocity: [1.0, 0.0, 0.0]}
+    init_from: checkpoints/high/final_model.zip
+
+  - name: high_evasive
+    env_stage: high
+    config: train_ppo_high_level.yaml
+    target_policy: evasive
+    target_policy_params: {velocity: [0.8, 0.0, 0.0], amplitude: 3.0, omega: 0.6}
+    init_from: checkpoints/high/final_model.zip
+
+  - name: low_constant_velocity
+    env_stage: low
+    config: train_sac_low_level.yaml
+    target_policy: constant_velocity
+    # Behavioural bootstrap from the high-level policy (see README).
+    init_from: ''

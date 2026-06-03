@@ -1,0 +1,25 @@
+# Stage 1: high-level velocity-setpoint interception, trained with PPO.
+env:
+  world: default
+  interceptor_entity: x500_d435_0
+  target_entity: x3_uav_1
+  interceptor_spawn: [0.0, 0.0, 0.0]
+  target_spawn: [10.0, 0.0, 0.0]
+  control_rate_hz: 20.0
+  max_episode_steps: 400
+  capture_radius: 1.0
+  target_altitude: 4.0
+  v_max: 8.0
+  target_policy: static          # curriculum: static -> constant_velocity -> evasive
+  target_policy_params: {}
+  use_teleport: true
+
+algo:
+  name: PPO
+  total_timesteps: 200000
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 64
+  gamma: 0.99
+  gae_lambda: 0.95
+  ent_coef: 0.0
