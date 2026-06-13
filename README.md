@@ -1,63 +1,47 @@
 # d2dtracker_rl
 
-Reinforcement-learning **drone-to-drone interception** for ROS 2 Jazzy +
-Gazebo Harmonic + PX4 SITL, using **Gymnasium** + **Stable-Baselines3**.
-
-The interceptor learns to catch a target UAV with PX4 **in the loop** and the
-sim **rendered** (non-headless). A **curriculum** trains two action interfaces:
-
-| Stage | Env id | Action | Obs | Algo |
-|---|---|---|---|---|
-| 1 (primary) | `D2DIntercept-HighLevel-v0` | ENU velocity setpoint `Box(3)` | 13 | PPO |
-| 2 | `D2DIntercept-LowLevel-v0` | body rates + thrust `Box(4)` | 20 | SAC |
+Reinforcement learning for **drone-to-drone interception** (Gymnasium + SB3),
+built on the [AeroGym-PX4](https://github.com/asmbatati/AeroGym-PX4)
+autopilot-in-the-loop playground (PX4 SITL + ROS 2 Jazzy + MAVROS + gz
+Harmonic).
 
 ## Architecture
 
-- `ros_interface.py` — one rclpy node spun in a background thread; caches
-  interceptor/target odometry + FCU state, publishes setpoints, arms / sets mode.
-- `envs/base_intercept_env.py` — Gymnasium env; `step()` applies the action,
-  lets the sim advance one control tick, then reads fresh cached state for the
-  observation/reward (the fix over the old code, which never refreshed state).
-- `envs/high_level_env.py`, `envs/low_level_env.py` — the two action interfaces.
-- `px4_reset.py` — episode reset by teleporting both Gazebo entities
-  (`gz service .../set_pose`) + re-establishing armed/OFFBOARD, with a
-  land+rearm fallback.
-- `target_policy.py` — scripted target motion (static / constant-velocity /
-  evasive) for the curriculum.
-- `train.py`, `evaluate.py` — SB3 drivers.
+AeroGym-PX4 provides the generic single-vehicle training core (sim-time
+stepping at a capped speed factor, managed isolated sim stacks with crash
+auto-restart, reset/rescue machinery, SB3 trainers). This package adds the
+interception layer on top — the playground itself stays interception-free:
 
-## Dependencies (pip — no apt package on Jazzy)
+| piece | what |
+|---|---|
+| `aerogym_intercept/sim.py` | `InterceptSimInstance` — TWO PX4 vehicles in one gz world per worker (instances `2r`/`2r+1`; pair ranks 0..4) |
+| `aerogym_intercept/env.py` | `InterceptEnv(BasePX4Env)` — adds the target's ROS interface, world-frame target state, scripted target driving, target episode reset |
+| `aerogym_intercept/task.py` | `intercept` task plugin (registered into aerogym's registry from here): closing + alignment + near-field precision reward, capture termination |
+| `aerogym_intercept/train_intercept.py` / `evaluate_intercept.py` | SB3 trainer (curriculum over target policies) + capture-rate evaluator |
+| `target_policy.py` | scripted target: `static` / `constant_velocity` / `evasive` (the curriculum axis) |
 
-```bash
-pip install --user --break-system-packages "stable-baselines3>=2.3" "gymnasium>=0.29" tensorboard
-# torch is required by SB3; if you hit a sympy `equal_valued` ImportError, run:
-pip install --user --break-system-packages --force-reinstall --no-deps "sympy>=1.13"
-```
+`external/AeroGym-PX4` is a git **submodule** pinning the exact playground
+version (it carries a `COLCON_IGNORE`; the colcon workspace builds the
+side-by-side `src/AeroGym-PX4` checkout — keep exactly one buildable copy).
 
-## Run (two terminals — keep the sim up across training restarts)
+## Train / evaluate
 
 ```bash
-# Terminal A: bring up the rendered two-drone sim and wait for both FCUs
-ros2 launch drone_interception_sim interception.launch.py
-#   verify: ros2 topic echo /interceptor/mavros/state --once   (connected: true)
-
-# Terminal B: stage-1 training
-ros2 launch d2dtracker_rl train_high_level.launch.py
-tensorboard --logdir runs/
+# stage 1: static target (SAC, managed two-vehicle stack, 4x sim)
+ros2 run d2dtracker_rl train_intercept --timesteps 200000 --speed-factor 4
+# stage 2/3: moving / evasive target, bootstrapped:
+ros2 run d2dtracker_rl train_intercept --target-policy constant_velocity \
+    --init-from checkpoints/intercept/final_model.zip
+ros2 run d2dtracker_rl evaluate_intercept --model checkpoints/intercept/final_model.zip \
+    --episodes 10 --target-policy constant_velocity
 ```
 
-Evaluate / visualise a trained policy live in Gazebo:
+Visualize live training (Gazebo GUI spectator), TensorBoard, capacity and
+troubleshooting: see AeroGym-PX4's `TRAINING.md` (partitions here are
+`aerogym_icpt_<policy>_<2r>`). Each worker pair costs ~5-6 CPU cores.
 
-```bash
-ros2 launch d2dtracker_rl evaluate.launch.py \
-    stage:=high model:=checkpoints/high/final_model.zip
-```
+## Legacy
 
-## Curriculum
-
-`config/curriculum.yaml` lists progressively harder target behaviour
-(static → constant-velocity → evasive). Advance stages by editing
-`env.target_policy` in the train config, and bootstrap a stage from a prior
-checkpoint with `--init-from checkpoints/high/final_model.zip`. Stage 2
-(low-level) differs in obs/action dims, so it bootstraps behaviourally rather
-than by direct weight transfer (see plan notes).
+`d2dtracker_rl/envs/` (the pre-AeroGym single-process envs), `train.py`,
+`evaluate.py`, `curriculum.py` and the launch files are the original
+implementation, kept for reference; new work targets `aerogym_intercept/`.

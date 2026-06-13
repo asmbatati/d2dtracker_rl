@@ -14,6 +14,7 @@
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>mavros_msgs</depend>
+  <depend>aerogym_px4</depend>
   <depend>std_srvs</depend>
 
   <!-- RL stack (stable-baselines3, gymnasium, tensorboard) is pip-installed;
