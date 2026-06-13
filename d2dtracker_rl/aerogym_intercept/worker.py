@@ -53,7 +53,8 @@ def build_intercept_worker_env(rank, env_cfg, run_id='intercept',
 
 
 def make_intercept_vec_env(n_envs, env_cfg, run_id='intercept',
-                           speed_factor=1.0, domain_base=100, seed=0):
+                           speed_factor=1.0, domain_base=100, seed=0,
+                           rank_offset=0):
     """SB3 SubprocVecEnv of interception envs (spawn; one 2-vehicle stack each)."""
     from stable_baselines3.common.vec_env import SubprocVecEnv
 
@@ -61,8 +62,8 @@ def make_intercept_vec_env(n_envs, env_cfg, run_id='intercept',
         def _t():
             from stable_baselines3.common.monitor import Monitor
             env = build_intercept_worker_env(
-                i, env_cfg, run_id=run_id, speed_factor=speed_factor,
-                domain_base=domain_base)
+                rank_offset + i, env_cfg, run_id=run_id,
+                speed_factor=speed_factor, domain_base=domain_base)
             env.reset(seed=seed + i)
             return Monitor(env)
         return _t

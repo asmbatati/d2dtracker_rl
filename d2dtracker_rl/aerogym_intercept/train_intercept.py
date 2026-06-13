@@ -23,6 +23,9 @@ def main(args=None):
                    choices=['static', 'constant_velocity', 'evasive'])
     p.add_argument('--env-config', default=None, help='env YAML override')
     p.add_argument('--init-from', default=None)
+    p.add_argument('--pair-rank', type=int, default=0,
+                   help='worker pair rank (PX4 instances 2r/2r+1); pick one '
+                        'whose instances no other run uses')
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--out', default='checkpoints')
     p.add_argument('--log-dir', default='runs')
@@ -39,7 +42,7 @@ def main(args=None):
     env = make_intercept_vec_env(args.n_envs, env_cfg,
                                  run_id=f'icpt_{args.target_policy}',
                                  speed_factor=args.speed_factor,
-                                 seed=args.seed)
+                                 seed=args.seed, rank_offset=args.pair_rank)
 
     from stable_baselines3 import PPO, SAC
     from stable_baselines3.common.callbacks import CheckpointCallback
