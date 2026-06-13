@@ -35,6 +35,9 @@ def build_intercept_worker_env(rank, env_cfg, run_id='intercept',
     env_cfg['entity'] = sim.entity
     env_cfg['target_entity'] = sim.target_entity
 
+    # register the 'intercept' task IN THIS PROCESS: SubprocVecEnv(spawn)
+    # workers are fresh interpreters — the parent's registration is invisible
+    from . import task  # noqa: F401
     from .env import InterceptEnv
     env = InterceptEnv(config=env_cfg, sim=sim)
 
