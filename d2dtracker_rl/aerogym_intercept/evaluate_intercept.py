@@ -14,16 +14,22 @@ def main(args=None):
     p.add_argument('--model', required=True)
     p.add_argument('--episodes', type=int, default=10)
     p.add_argument('--target-policy', default='static')
+    p.add_argument('--target-speed', type=float, default=0.5,
+                   help='moving-target speed (match the training stage)')
     p.add_argument('--speed-factor', type=float, default=4.0)
     p.add_argument('--rank', type=int, default=2,
                    help='pair rank for the eval stack (avoid training ranks)')
     p.add_argument('--seed', type=int, default=100)
     args = p.parse_args(args)
 
+    eval_cfg = {'target_policy': args.target_policy}
+    if args.target_policy in ('constant_velocity', 'evasive'):
+        eval_cfg['target_policy_params'] = {'velocity': [args.target_speed, 0.0, 0.0]}
+
     from . import task  # noqa: F401
     from .worker import build_intercept_worker_env
     env = build_intercept_worker_env(
-        args.rank, {'target_policy': args.target_policy},
+        args.rank, eval_cfg,
         run_id='icpt_eval', speed_factor=args.speed_factor, stagger=0.0)
 
     from stable_baselines3 import PPO, SAC
