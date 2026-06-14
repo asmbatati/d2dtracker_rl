@@ -27,6 +27,11 @@ def main(args=None):
                    help='worker pair rank (PX4 instances 2r/2r+1); pick one '
                         'whose instances no other run uses')
     p.add_argument('--seed', type=int, default=0)
+    p.add_argument('--target-speed', type=float, default=0.5,
+                   help='moving-target speed (m/s) for constant_velocity/evasive')
+    p.add_argument('--ent-coef', type=float, default=0.02,
+                   help='fixed SAC entropy coef when --init-from is set '
+                        '(low = refine the bootstrap, do not re-explore)')
     p.add_argument('--out', default='checkpoints')
     p.add_argument('--log-dir', default='runs')
     args = p.parse_args(args)
@@ -36,6 +41,12 @@ def main(args=None):
         with open(args.env_config) as f:
             env_cfg = yaml.safe_load(f) or {}
     env_cfg['target_policy'] = args.target_policy
+    # Soft curriculum jump: a slow moving target (default 0.5 m/s) is reachable
+    # from the static policy. Applies to constant_velocity and evasive.
+    if args.target_policy in ('constant_velocity', 'evasive'):
+        params = dict(env_cfg.get('target_policy_params') or {})
+        params.setdefault('velocity', [args.target_speed, 0.0, 0.0])
+        env_cfg['target_policy_params'] = params
 
     from . import task  # noqa: F401  (registers 'intercept' in aerogym TASKS)
     from .worker import make_intercept_vec_env
@@ -51,16 +62,25 @@ def main(args=None):
     os.makedirs(out_dir, exist_ok=True)
     common = dict(verbose=1, seed=args.seed,
                   tensorboard_log=os.path.join(args.log_dir, 'intercept'))
+    # When bootstrapping a good policy, do NOT let SAC's default auto-entropy
+    # re-explode it: a fixed low entropy coefficient keeps actions near the
+    # loaded policy so it REFINES instead of crashing every episode (the cause
+    # of the flat -1100 / 3.6-steps-s stall on the first stage-2 attempt).
+    boot = bool(args.init_from and os.path.isfile(args.init_from))
     if args.algo == 'ppo':
         model = PPO('MlpPolicy', env, learning_rate=3e-4, n_steps=2048,
-                    batch_size=64, gamma=0.99, gae_lambda=0.95, **common)
+                    batch_size=64, gamma=0.99, gae_lambda=0.95,
+                    ent_coef=(0.0 if boot else 0.0), **common)
     else:
         model = SAC('MlpPolicy', env, learning_rate=3e-4,
                     buffer_size=1_000_000, batch_size=256, gamma=0.99,
-                    tau=0.005, train_freq=1, **common)
-    if args.init_from and os.path.isfile(args.init_from):
+                    tau=0.005, train_freq=1,
+                    ent_coef=(args.ent_coef if boot else 'auto'),
+                    learning_starts=(500 if boot else 100), **common)
+    if boot:
         model.set_parameters(args.init_from)
-        print(f'[train_intercept] bootstrapped from {args.init_from}')
+        print(f'[train_intercept] bootstrapped from {args.init_from} '
+              f'(ent_coef={args.ent_coef}, low-exploration refine)')
 
     ckpt = CheckpointCallback(
         save_freq=max(20000 // max(args.n_envs, 1), 1), save_path=out_dir,
