@@ -29,9 +29,9 @@ def main(args=None):
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--target-speed', type=float, default=0.5,
                    help='moving-target speed (m/s) for constant_velocity/evasive')
-    p.add_argument('--ent-coef', type=float, default=0.02,
-                   help='fixed SAC entropy coef when --init-from is set '
-                        '(low = refine the bootstrap, do not re-explore)')
+    p.add_argument('--ent-coef', type=float, default=0.1,
+                   help='fixed SAC entropy coef when bootstrapping (--init-from): '
+                        'low = refine the loaded policy, do not re-explore')
     p.add_argument('--out', default='checkpoints')
     p.add_argument('--log-dir', default='runs')
     args = p.parse_args(args)
@@ -62,25 +62,31 @@ def main(args=None):
     os.makedirs(out_dir, exist_ok=True)
     common = dict(verbose=1, seed=args.seed,
                   tensorboard_log=os.path.join(args.log_dir, 'intercept'))
-    # When bootstrapping a good policy, do NOT let SAC's default auto-entropy
-    # re-explode it: a fixed low entropy coefficient keeps actions near the
-    # loaded policy so it REFINES instead of crashing every episode (the cause
-    # of the flat -1100 / 3.6-steps-s stall on the first stage-2 attempt).
     boot = bool(args.init_from and os.path.isfile(args.init_from))
     if args.algo == 'ppo':
         model = PPO('MlpPolicy', env, learning_rate=3e-4, n_steps=2048,
-                    batch_size=64, gamma=0.99, gae_lambda=0.95,
-                    ent_coef=(0.0 if boot else 0.0), **common)
+                    batch_size=64, gamma=0.99, gae_lambda=0.95, **common)
     else:
+        # FIXED low entropy for the curriculum bootstrap. NOT 'auto': the static
+        # model's auto-entropy had annealed UP to coef~39 (its policy went very
+        # deterministic, so SAC cranked exploration), and a fresh 'auto' starts
+        # at 1.0 — either way the loaded policy gets re-explored into a crash
+        # every episode (the flat -1100 / 3.6-steps-s stall). A fixed low coef
+        # keeps actions near the loaded policy so it REFINES on the new target.
         model = SAC('MlpPolicy', env, learning_rate=3e-4,
                     buffer_size=1_000_000, batch_size=256, gamma=0.99,
                     tau=0.005, train_freq=1,
                     ent_coef=(args.ent_coef if boot else 'auto'),
                     learning_starts=(500 if boot else 100), **common)
     if boot:
-        model.set_parameters(args.init_from)
-        print(f'[train_intercept] bootstrapped from {args.init_from} '
-              f'(ent_coef={args.ent_coef}, low-exploration refine)')
+        # transfer ONLY the network weights (actor + critics, the 'policy' key);
+        # skip the saved entropy/optimizer state (which would AttributeError
+        # against this model's fixed-entropy setup and re-inject coef~39).
+        from stable_baselines3.common.save_util import load_from_zip_file
+        _, saved, _ = load_from_zip_file(args.init_from)
+        model.set_parameters({'policy': saved['policy']}, exact_match=False)
+        print(f'[train_intercept] policy-weights bootstrap from {args.init_from} '
+              f'(fixed ent_coef={args.ent_coef} refine)')
 
     ckpt = CheckpointCallback(
         save_freq=max(20000 // max(args.n_envs, 1), 1), save_path=out_dir,
