@@ -25,7 +25,19 @@ def build_intercept_worker_env(rank, env_cfg, run_id='intercept',
         target_spawn=tuple(env_cfg.get('target_spawn', [10.0, 0.0, 0.0]))[:2]
         + (0.2,))
     os.environ.update(sim.child_env)   # BEFORE rclpy.init
-    sim.boot()
+    # Retry the initial boot: a single flaky PX4 (EKF/port contention) raises
+    # 'boot failed: [px4]'. Without this an eval (which boots once) is lost to
+    # one bad boot — the readiness retry below only covers the clock/FCU gate.
+    for boot_try in range(3):
+        try:
+            sim.boot()
+            break
+        except RuntimeError as e:
+            if boot_try == 2:
+                raise
+            print(f'[worker {rank}] boot attempt {boot_try + 1} failed ({e}); '
+                  'retrying')
+            sim.close()
 
     import rclpy
     if not rclpy.ok():
