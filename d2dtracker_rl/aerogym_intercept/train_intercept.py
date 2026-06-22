@@ -32,6 +32,9 @@ def main(args=None):
     p.add_argument('--ent-coef', type=float, default=0.1,
                    help='fixed SAC entropy coef when bootstrapping (--init-from): '
                         'low = refine the loaded policy, do not re-explore')
+    p.add_argument('--learning-rate', type=float, default=3e-4,
+                   help='optimizer LR; drop to ~1e-4 for a stable bootstrap '
+                        'refine (the 3e-4 from-scratch run diverged past ~120k)')
     p.add_argument('--out', default='checkpoints')
     p.add_argument('--log-dir', default='runs')
     args = p.parse_args(args)
@@ -64,8 +67,9 @@ def main(args=None):
                   tensorboard_log=os.path.join(args.log_dir, 'intercept'))
     boot = bool(args.init_from and os.path.isfile(args.init_from))
     if args.algo == 'ppo':
-        model = PPO('MlpPolicy', env, learning_rate=3e-4, n_steps=2048,
-                    batch_size=64, gamma=0.99, gae_lambda=0.95, **common)
+        model = PPO('MlpPolicy', env, learning_rate=args.learning_rate,
+                    n_steps=2048, batch_size=64, gamma=0.99, gae_lambda=0.95,
+                    **common)
     else:
         # FIXED low entropy for the curriculum bootstrap. NOT 'auto': the static
         # model's auto-entropy had annealed UP to coef~39 (its policy went very
@@ -73,7 +77,7 @@ def main(args=None):
         # at 1.0 — either way the loaded policy gets re-explored into a crash
         # every episode (the flat -1100 / 3.6-steps-s stall). A fixed low coef
         # keeps actions near the loaded policy so it REFINES on the new target.
-        model = SAC('MlpPolicy', env, learning_rate=3e-4,
+        model = SAC('MlpPolicy', env, learning_rate=args.learning_rate,
                     buffer_size=1_000_000, batch_size=256, gamma=0.99,
                     tau=0.005, train_freq=1,
                     ent_coef=(args.ent_coef if boot else 'auto'),

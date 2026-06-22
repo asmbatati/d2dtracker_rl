@@ -57,21 +57,31 @@ All evals are 6 deterministic episodes, capture gate 1.0 m.
 | v3 80k (floor + boundary) | 0/6 | 3.78 m | stable, in-bounds, parks too far |
 | v4 60k (wide strong bell) | 1/6 | 57 m | captures but **overshoots/oob** (under-trained, aggressive) |
 | v4 100k | 2/6 | 1.17 m | stable, tight, all 6 within 1.5 m |
-| **v4 120k (best)** | **2/6** | **1.05 m** | stable, all 6 within 1.36 m, 0 crash / 0 oob |
+| v4 120k | 2/6 | 1.05 m | stable, all 6 within 1.36 m, 0 crash / 0 oob |
+| **refine 40k (best)** | **9/10** | **0.96 m** | bootstrap + tight bell + LR 1e-4; 0 crash / 0 oob |
 
-The v4 policy reliably closes to the **1.0 m capture boundary** and dips under it
-on 2/6 (one near-miss was exactly 1.00 m). 0 crashes, 0 out-of-bounds, 6/6 clean
-resets — a control-precision limit at the equilibrium, not instability.
+v4 reliably closed to the **1.0 m capture boundary** but parked just outside it
+(2/6, equilibrium ~1.05 m). The **refine** run fixed that: bootstrap the v4-120k
+weights, swap in a tighter/stronger near-field bell (`config/refine_tight.yaml`:
+`prec_sigma` 3.0, `w_prec` 8.0) to pull the equilibrium *under* the gate, at a
+lower LR (1e-4) for stability. Result: **9/10 capture, mean closest approach
+0.96 m, 0 crashes / 0 out-of-bounds** (verified on a held-out seed, 10 eps). The
+deliverable is **`model_static_refine_40k.zip`**.
 
 ### SAC stability note (use early stopping)
 
-Past the ~120 k peak (ep_rew_mean +682) the run **diverged** — ep_rew collapsed
-to −1790 by 140 k (Q-overestimation from the large +1000 capture target combined
-with auto-entropy, a known SAC failure mode). The per-20k checkpoints preserve
-the pre-collapse models; **`model_static_v4_best.zip` (120 k) is the deliverable.**
-To push capture rate higher / train longer safely: lower the learning rate
-(3e-4 → 1e-4), shrink the capture bonus, or bootstrap from the 120 k model with a
-tighter near-field bell to nudge the equilibrium under 1.0 m.
+Both runs peak then drift, so checkpoint and pick the best:
+* the from-scratch v4 run **diverged** past its ~120 k peak (ep_rew +682 → −1790
+  by 140 k — Q-overestimation from the +1000 capture target + auto-entropy);
+* the refine run was stable (LR 1e-4 + fixed entropy, no collapse) but
+  **over-trained into aggression** past ~40 k — the 60 k checkpoint dashes and
+  flies out of bounds deterministically (1/6) despite a high *stochastic* reward
+  (+620). Classic stochastic-vs-deterministic divergence: always confirm with a
+  deterministic eval, not the training curve.
+
+The tighter bell lives in a config override, **not** the task defaults: a narrow
+bell only works as a warm-start refine (the craft already near the target); a
+fresh run with it parks far out (the v3 failure).
 
 ## Curriculum (planned)
 
@@ -89,10 +99,16 @@ every boot fails with `boot failed: ['mavros']` (undefined-symbol, exit 127):
 ## Reproduce
 
 ```bash
-# train (stop at / keep the best ~100-120k checkpoint; later checkpoints collapse)
+# 1. base run (keep the best ~100-120k checkpoint; later checkpoints collapse)
 ros2 run d2dtracker_rl train_intercept --timesteps 150000 --speed-factor 4 --pair-rank 0
-# evaluate deterministically on a disjoint stack
+# 2. refine: bootstrap the best base model with a tighter bell at a low LR
+#    (keep the best ~40k checkpoint; later checkpoints over-train into aggression)
+ros2 run d2dtracker_rl train_intercept --target-policy static \
+    --init-from checkpoints/intercept/model_static_v4_best.zip \
+    --env-config config/refine_tight.yaml --learning-rate 1e-4 \
+    --ent-coef 0.1 --timesteps 100000 --speed-factor 4 --pair-rank 0
+# 3. evaluate deterministically on a disjoint stack (the real signal)
 ros2 run d2dtracker_rl evaluate_intercept \
-    --model checkpoints/intercept/model_static_v4_best.zip \
-    --episodes 6 --target-policy static --rank 2
+    --model checkpoints/intercept/model_static_refine_40k.zip \
+    --episodes 10 --target-policy static --rank 2
 ```

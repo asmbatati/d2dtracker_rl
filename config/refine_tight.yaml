@@ -1,0 +1,6 @@
+# Bootstrap-refine reward: tighter, stronger near-field bell to pull the
+# equilibrium from ~1.05 m (v4 best) under the 1.0 m capture gate. Only safe as a
+# WARM-START refine (the craft is already near the target) — a fresh run with a
+# narrow bell parks far out (the v3 failure). Floor/boundary unchanged.
+prec_sigma: 3.0
+w_prec: 8.0
