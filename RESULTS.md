@@ -83,12 +83,47 @@ The tighter bell lives in a config override, **not** the task defaults: a narrow
 bell only works as a warm-start refine (the craft already near the target); a
 fresh run with it parks far out (the v3 failure).
 
-## Curriculum (planned)
+## Curriculum (completed)
 
-Target-policy axis, each stage bootstrapped from the previous checkpoint:
-`static` -> `constant_velocity` -> `evasive` (the `target_policy.py`
-behaviours). Run with `--target-policy ... --init-from ...`. Bootstrap transfers
-network weights only with a fixed low entropy coef (see `train_intercept.py`).
+Target-policy axis, each stage bootstrapped from the previous stage's best
+checkpoint (policy-weights transfer, fixed low entropy, LR 1e-4, tight-bell
+config). Evals are 10 deterministic episodes on a held-out seed (200).
+
+| stage | model | capture | mean min-range | mean t_capture |
+|---|---|---|---|---|
+| static | `model_static_refine_40k.zip` | **9/10** | 0.96 m | — |
+| constant_velocity (0.5 m/s) | `model_cv_40k.zip` | **10/10** | 0.78 m | 7.4 s |
+| evasive (0.5 m/s) | `model_evasive_40k.zip` | **9/10** | 0.97 m | 18.8 s |
+
+Capture time rises with difficulty (cornering a dodging target takes longer),
+as expected. Each stage peaks ~40 k then risks the over-train/collapse drift, so
+the 40 k checkpoint is kept for each. Reproduce:
+
+```bash
+ros2 run d2dtracker_rl train_intercept --target-policy constant_velocity \
+    --init-from checkpoints/intercept/model_static_refine_40k.zip \
+    --env-config config/refine_tight.yaml --learning-rate 1e-4 --ent-coef 0.1 \
+    --timesteps 100000 --speed-factor 4 --pair-rank 0
+# ...then --target-policy evasive --init-from .../model_cv_40k.zip
+ros2 run d2dtracker_rl evaluate_intercept --model checkpoints/intercept/model_evasive_40k.zip \
+    --target-policy evasive --target-speed 0.5 --episodes 10 --rank 2
+```
+
+### Two-vehicle reset fix (what unblocked the curriculum)
+
+The first curriculum attempt produced a flaky `constant_velocity` (4/10) that
+then collapsed in training. Root cause was **not** the policy: capturing the
+target makes the two physical gz models collide, knocking the **target** to the
+ground, and the old airborne-only target teleport could not recover it — leaving
+the next episode with a grounded, mis-placed target (seen at `[-22.9,-5.4,0.2]`)
+that was unwinnable and poisoned the replay buffer. Fixed in
+`InterceptEnv._cosettle`: after the interceptor reset, stream **both** vehicles'
+setpoints together until each is at its start and airborne (both PX4s need
+continuous OFFBOARD), recovering a knocked-down target. With the fix,
+`constant_velocity` went 4/10 → **10/10**. (A diagnostic that prints both
+vehicles' start/end positions per episode is the fastest way to catch this class
+of two-vehicle reset bug — a physically impossible min-range, e.g. 237 m for a
+0.5 m/s target, points straight at a corrupted vehicle state.)
 
 ## Environment note
 
