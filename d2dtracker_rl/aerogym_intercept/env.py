@@ -11,10 +11,12 @@ guards, action interfaces). This subclass adds:
   curriculum axis) driven once per control tick,
 * target episode reset: teleport + re-arm/OFFBOARD hold.
 """
+import time
+
 import numpy as np
 
 from aerogym_px4.core.base_env import BasePX4Env
-from aerogym_px4.core.px4_reset import ensure_armed_offboard, gz_set_entity_pose
+from aerogym_px4.core.px4_reset import gz_set_entity_pose
 from aerogym_px4.core.ros_interface import VehicleRosInterface
 
 from ..target_policy import make_target_policy
@@ -84,6 +86,65 @@ class InterceptEnv(BasePX4Env):
         self._drive_target()
         return super().step(action)
 
+    # --- target recovery -------------------------------------------------------
+    def _target_airborne(self):
+        todom = self.target_ros.odom()
+        return (todom is not None and todom.pose.pose.position.z > 1.0
+                and self.target_ros.state().armed)
+
+    def _target_near(self, start, tol=2.5):
+        todom = self.target_ros.odom()
+        if todom is None:
+            return False
+        p = todom.pose.pose.position
+        pos = np.array([p.x, p.y, p.z]) + self._tspawn   # world frame
+        return float(np.linalg.norm(pos - np.asarray(start, float))) < tol
+
+    def _recover_target(self, start):
+        """Put the target at ``start`` (world frame), airborne and armed.
+
+        Mirrors the interceptor's _ensure_ready. Capturing the target makes the
+        two physical gz models collide, which can knock the target to the ground;
+        the old airborne-only teleport then could not recover it, leaving the
+        next episode with a grounded, mis-placed target (observed: target at
+        [-22.9, -5.4, 0.2] -> unwinnable episode). So: airborne -> teleport home;
+        grounded/crashed -> reposition+level at a low pose to clear the state,
+        then climb under OFFBOARD; verify near-start + airborne before returning.
+        """
+        start = np.asarray(start, dtype=float)
+        hold = start - self._tspawn                      # target's own EKF frame
+        extra = self.sim.child_env if self.sim is not None else None
+        if self._target_airborne():
+            gz_set_entity_pose(self.cfg['world'], self.cfg['target_entity'],
+                               float(start[0]), float(start[1]), float(start[2]),
+                               extra_env=extra)
+        else:
+            gz_set_entity_pose(self.cfg['world'], self.cfg['target_entity'],
+                               float(start[0]), float(start[1]), 0.3,
+                               extra_env=extra)
+            self.target_ros.arm(False)                   # clear crash/failsafe
+            self._wait_tick()
+        # stream the hold setpoint until the target reaches start + is airborne
+        t_end = (self.ros.sim_time() or 0.0) + 12.0
+        deadline = time.monotonic() + 30.0
+        while True:
+            if self._target_near(start) and self._target_airborne():
+                return True
+            now = self.ros.sim_time()
+            if (self.use_sim_time and now is not None and now >= t_end) \
+                    or time.monotonic() >= deadline:
+                return self._target_airborne()
+            self.target_ros.publish_position_target(*hold)
+            stt = self.target_ros.state()
+            if stt.mode != 'OFFBOARD':
+                self.target_ros.set_mode('OFFBOARD')
+            if not stt.armed:
+                self.target_ros.arm(True)
+            if self.use_sim_time and now is not None:
+                self.ros.wait_sim_time(now + 0.1, wall_timeout=2.0)
+            else:
+                time.sleep(0.1)
+
     # --- reset -----------------------------------------------------------------
     def reset(self, *, seed=None, options=None):
         # target first: fresh start point + policy, teleport + hold
@@ -98,20 +159,9 @@ class InterceptEnv(BasePX4Env):
             self.cfg['target_policy'], list(start),
             **(self.cfg.get('target_policy_params') or {}))
 
-        # teleport only when airborne (same EKF-safety rule as the interceptor);
-        # a grounded target instead climbs to its start under the held setpoint
-        # + the policy setpoints during the first episode seconds
-        todom = self.target_ros.odom()
-        airborne = (todom is not None and todom.pose.pose.position.z > 1.0
-                    and self.target_ros.state().armed)
-        if airborne:
-            gz_set_entity_pose(
-                self.cfg['world'], self.cfg['target_entity'], *start,
-                extra_env=self.sim.child_env if self.sim is not None else None)
-        hold = start - self._tspawn          # target's own odom frame
-        ensure_armed_offboard(self.target_ros, tuple(hold),
-                              settle_steps=10, dt=self.control_dt,
-                              use_sim_time=self.use_sim_time)
+        # robustly place the target at its start, airborne and armed — recovers a
+        # target knocked to the ground by the capture collision (see method doc)
+        self._recover_target(start)
 
         return super().reset(seed=seed, options=options)
 
