@@ -16,6 +16,7 @@
   <depend>mavros_msgs</depend>
   <depend>aerogym_px4</depend>
   <depend>std_srvs</depend>
+  <exec_depend>d2dtracker_interception</exec_depend>  <!-- PN baseline in evaluate_intercept -->
 
   <!-- RL stack (stable-baselines3, gymnasium, tensorboard) is pip-installed;
        there is no apt package on Jazzy. See the package README for the command. -->
