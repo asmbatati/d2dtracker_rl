@@ -12,6 +12,10 @@ learned policy's:
   (N 3, closing speed 6 m/s, cap ``v_max``), the sim benchmark's PN baseline;
 * ``--policy pursuit`` -- pure pursuit: fly the line of sight at ``v_max``.
 
+``--cbf`` passes every action (learned or scripted) through the CBF safety
+filter of ``d2dtracker_interception.safety`` (altitude floor ``--cbf-z-min``,
+ceiling and geofence just inside the env's arena bounds).
+
 ``--csv`` appends one row per episode; ``--traj-dir`` saves each episode's
 positions (``t, interceptor xyz, target xyz``) as ``.npz`` for figures.
 """
@@ -74,6 +78,10 @@ def main(args=None):
     p.add_argument('--traj-dir', default=None, help='save per-episode .npz here')
     p.add_argument('--label', default=None,
                    help='policy label for the CSV (default: model file or baseline)')
+    p.add_argument('--cbf', action='store_true',
+                   help='filter actions with the CBF safety filter')
+    p.add_argument('--cbf-z-min', type=float, default=1.5)
+    p.add_argument('--cbf-alpha', type=float, default=1.0)
     args = p.parse_args(args)
     if args.policy == 'model' and not args.model:
         p.error('--model is required for --policy model')
@@ -103,6 +111,15 @@ def main(args=None):
     else:
         model = ScriptedPolicy(args.policy, env)
         label = args.label or args.policy
+    cbf = None
+    if args.cbf:
+        from d2dtracker_interception.safety import CBFVelocityFilter
+        cbf = CBFVelocityFilter(
+            z_min=args.cbf_z_min, z_max=float(env.cfg['arena_alt_max']) - 2.0,
+            fence_radius=float(env.cfg['arena_horiz']) - 5.0, alpha=args.cbf_alpha)
+        v_max = float(env.cfg.get('v_max', 8.0))
+        if not args.label:
+            label += '+cbf'
 
     writer = None
     if args.csv:
@@ -124,6 +141,10 @@ def main(args=None):
         rows, steps, info = [], 0, {}
         while not (done or trunc):
             action, _ = model.predict(obs, deterministic=True)
+            if cbf is not None:
+                v, _ = cbf.apply(env._state()['position'],
+                                 np.clip(np.asarray(action, float), -1, 1) * v_max)
+                action = np.clip(v / v_max, -1.0, 1.0).astype(np.float32)
             obs, r, done, trunc, info = env.step(action)
             steps += 1
             st = env._state()
