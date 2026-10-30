@@ -1,2 +1,9 @@
 __pycache__/
 *.pyc
+
+# Training outputs stay on disk (copied to the owner's Drive), not in git.
+# The three curriculum deliverables below were committed earlier and stay tracked.
+checkpoints/
+runs/
+*.log
+montage_out/
