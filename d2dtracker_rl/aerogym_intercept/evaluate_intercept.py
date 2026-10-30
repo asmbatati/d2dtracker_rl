@@ -26,7 +26,8 @@ import os
 import numpy as np
 
 CSV_FIELDS = ['policy', 'model', 'target_policy', 'target_speed', 'episode',
-              'seed', 'outcome', 't_s', 'min_range_m', 'steps']
+              'seed', 'outcome', 't_s', 'min_range_m', 'steps', 'min_alt_m',
+              'cbf_active_frac']
 
 
 class ScriptedPolicy:
@@ -74,6 +75,7 @@ def main(args=None):
     p.add_argument('--run-id', default='icpt_eval',
                    help='names the stack (GZ_PARTITION aerogym_<run-id>_<2*rank>)')
     p.add_argument('--seed', type=int, default=100)
+    p.add_argument('--device', default='cpu', help='torch device for the policy')
     p.add_argument('--csv', default=None, help='append per-episode rows here')
     p.add_argument('--traj-dir', default=None, help='save per-episode .npz here')
     p.add_argument('--label', default=None,
@@ -101,7 +103,7 @@ def main(args=None):
         model = None
         for cls in (SAC, PPO):
             try:
-                model = cls.load(args.model)
+                model = cls.load(args.model, device=args.device)
                 break
             except Exception:
                 continue
@@ -137,19 +139,21 @@ def main(args=None):
         seed = args.seed + ep
         obs, _ = env.reset(seed=seed)
         done = trunc = False
-        min_rng = float('inf')
+        min_rng, min_alt, n_active = float('inf'), float('inf'), 0
         rows, steps, info = [], 0, {}
         while not (done or trunc):
             action, _ = model.predict(obs, deterministic=True)
             if cbf is not None:
-                v, _ = cbf.apply(env._state()['position'],
-                                 np.clip(np.asarray(action, float), -1, 1) * v_max)
+                v, active = cbf.apply(env._state()['position'],
+                                      np.clip(np.asarray(action, float), -1, 1) * v_max)
                 action = np.clip(v / v_max, -1.0, 1.0).astype(np.float32)
+                n_active += int(active)
             obs, r, done, trunc, info = env.step(action)
             steps += 1
             st = env._state()
             min_rng = min(min_rng, float(np.linalg.norm(
                 st['target_position'] - st['position'])))
+            min_alt = min(min_alt, float(st['position'][2]))
             if args.traj_dir:
                 rows.append(np.concatenate([[env._t], st['position'],
                                             st['target_position']]))
@@ -167,7 +171,10 @@ def main(args=None):
                 'target_speed': (args.target_speed
                                  if args.target_policy != 'static' else 0.0),
                 'outcome': outcome, 't_s': f'{env._t:.2f}',
-                'min_range_m': f'{min_rng:.3f}', 'steps': steps})
+                'min_range_m': f'{min_rng:.3f}', 'steps': steps,
+                'min_alt_m': f'{min_alt:.3f}',
+                'cbf_active_frac': (f'{n_active / max(steps, 1):.3f}'
+                                    if cbf is not None else '')})
             fcsv.flush()
         if args.traj_dir and rows:
             name = (f'{label}__{args.target_policy}_{args.target_speed:g}'

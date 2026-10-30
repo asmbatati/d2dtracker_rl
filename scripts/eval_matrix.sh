@@ -5,7 +5,9 @@
 #
 # For every target policy (static, constant_velocity, evasive) and target speed
 # in SPEEDS (moving targets only; default "0.5"), runs evaluate_intercept for
-# the three curriculum models plus --policy pn and --policy pursuit, appending
+# the three curriculum models plus --policy pn and --policy pursuit (and, with
+# CBF=1, the default, PN / pursuit / the evasive model behind the CBF safety
+# filter, labelled <name>+cbf), appending
 # one row per episode to OUT_DIR/episodes.csv and saving trajectories under
 # OUT_DIR/traj/. Cells that already have EPISODES rows are skipped, so the
 # script can be re-run to resume.
@@ -22,6 +24,7 @@ PAIR_RANK=${PAIR_RANK:-1}
 DOMAIN_BASE=${DOMAIN_BASE:-19}
 RUN_ID=${RUN_ID:-ihunter_eval}
 SEED=${SEED:-200}
+CBF=${CBF:-1}
 PKG=$(cd "$(dirname "$0")/.." && pwd)
 CK=${CKPT_DIR:-$PKG/checkpoints/intercept}
 mkdir -p "$OUT/traj" "$OUT/logs"
@@ -57,6 +60,11 @@ for target in static constant_velocity evasive; do
     done
     run_cell pn "$target" "$speed" --policy pn
     run_cell pursuit "$target" "$speed" --policy pursuit
+    if [ "$CBF" = 1 ]; then
+      run_cell pn+cbf "$target" "$speed" --policy pn --cbf
+      run_cell pursuit+cbf "$target" "$speed" --policy pursuit --cbf
+      run_cell model_evasive_40k+cbf "$target" "$speed" --model "$CK/model_evasive_40k.zip" --cbf
+    fi
   done
 done
 echo "$(date +%T) done -> $CSV"

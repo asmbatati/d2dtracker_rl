@@ -39,6 +39,9 @@ def main(args=None):
     p.add_argument('--learning-rate', type=float, default=3e-4,
                    help='optimizer LR; drop to ~1e-4 for a stable bootstrap '
                         'refine (the 3e-4 from-scratch run diverged past ~120k)')
+    p.add_argument('--device', default='auto',
+                   help="torch device for SB3 ('cpu' keeps a shared GPU free; "
+                        'the MLP policy trains at the same speed, sim-bound)')
     p.add_argument('--out', default='checkpoints')
     p.add_argument('--log-dir', default='runs')
     args = p.parse_args(args)
@@ -68,7 +71,7 @@ def main(args=None):
 
     out_dir = os.path.join(args.out, 'intercept')
     os.makedirs(out_dir, exist_ok=True)
-    common = dict(verbose=1, seed=args.seed,
+    common = dict(verbose=1, seed=args.seed, device=args.device,
                   tensorboard_log=os.path.join(args.log_dir, 'intercept'))
     boot = bool(args.init_from and os.path.isfile(args.init_from))
     if args.algo == 'ppo':
