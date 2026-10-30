@@ -125,6 +125,30 @@ vehicles' start/end positions per episode is the fastest way to catch this class
 of two-vehicle reset bug — a physically impossible min-range, e.g. 237 m for a
 0.5 m/s target, points straight at a corrupted vehicle state.)
 
+## Caveat found 30 Oct 2026: the control period depends on machine load
+
+`BasePX4Env._wait_tick` waits until sim time reaches *(sim time when the action
+was sent) + control_dt*. The sim keeps running while the agent computes, at up
+to the speed cap, so every millisecond of wall time between steps adds
+`speed_factor` milliseconds of sim time to the step. The effective control
+period is therefore `control_dt + speed_factor x (per-step wall overhead)`, not
+0.05 s:
+
+| run | measured | effective period |
+|---|---|---|
+| June evaluations above (`eval_refine_40k_verify.log`) | 400-step timeout at 54.98 s sim | ~0.137 s/step |
+| 30 Oct re-evaluation, 4x, load ~50 on 32 cores | 400 steps in 32–34 s sim | ~0.08 s/step |
+| June training (SAC update every step), from SB3 `fps` 11–15 | ~77 ms wall per step at up to 4x | up to ~0.3 s/step (estimate; not logged) |
+
+The policies were trained and evaluated at different, load-dependent control
+rates, so the capture rates above hold for the conditions they were measured
+in and are not directly comparable with a re-run on a machine under a
+different load. The 30 Oct re-evaluation of the static model gave 7/30 (vs 9/10
+in June) at 0.08 s/step. `evaluate_intercept` now logs `step_dt_s` per episode
+for this reason. The fix is deterministic stepping (pause the world, advance a
+fixed number of physics iterations per action), which makes the period exact
+and load-independent; see ROADMAP C8.
+
 ## Environment note
 
 MAVROS must be rebuilt after a system `diagnostic_updater` update (ABI change) or

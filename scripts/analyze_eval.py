@@ -152,10 +152,18 @@ def fig_targets(s, policies, path):
 def main():
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('run', help='eval_matrix.sh output dir (holds episodes.csv)')
+    p.add_argument('--control-dt', type=float, default=0.05,
+                   help='env control period; episodes whose mean step exceeds '
+                        '1.1x this are excluded')
     a = p.parse_args()
     df = pd.read_csv(os.path.join(a.run, 'episodes.csv'))
     n_infra = int(df.outcome.isin(INFRA).sum())
     df = df[~df.outcome.isin(INFRA)]
+    n_slow = 0
+    if 'step_dt_s' in df:   # control period stretched by CPU load: not comparable
+        slow = pd.to_numeric(df.step_dt_s, errors='coerce') > 1.1 * a.control_dt
+        n_slow = int(slow.sum())
+        df = df[~slow]
     out = os.path.join(a.run, 'report')
     os.makedirs(out, exist_ok=True)
     policies = list(dict.fromkeys(df.policy))
@@ -165,7 +173,8 @@ def main():
     fig_targets(s, policies, os.path.join(out, 'capture_by_target.png'))
     fig_speed(s, policies, os.path.join(out, 'capture_vs_speed.png'))
     print(open(os.path.join(out, 'summary.md')).read())
-    print(f'{n_infra} infrastructure-fault episodes excluded; figures -> {out}')
+    print(f'{n_infra} infrastructure-fault and {n_slow} slow-step episodes '
+          f'excluded; figures -> {out}')
 
 
 if __name__ == '__main__':

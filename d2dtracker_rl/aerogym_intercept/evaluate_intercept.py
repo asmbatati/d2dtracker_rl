@@ -20,6 +20,12 @@ ceiling and geofence just inside the env's arena bounds).
 
 ``--csv`` appends one row per episode; ``--traj-dir`` saves each episode's
 positions (``t, interceptor xyz, target xyz``) as ``.npz`` for figures.
+
+``step_dt_s`` (sim seconds per control step) is the validity check: it should
+equal the env's ``control_dt`` (0.05 s). On an overloaded machine the sim runs
+on while the policy computes, every step gets longer (0.08 s seen at 4x speed
+and load ~50 on 32 cores) and the policy acts late; such episodes are not
+comparable. Lower ``--speed-factor`` when that happens.
 """
 import argparse
 import csv
@@ -29,7 +35,7 @@ import numpy as np
 
 CSV_FIELDS = ['policy', 'model', 'target_policy', 'target_speed', 'episode',
               'seed', 'outcome', 't_s', 'min_range_m', 'steps', 'min_alt_m',
-              'cbf_active_frac']
+              'cbf_active_frac', 'step_dt_s']
 
 
 class ScriptedPolicy:
@@ -189,7 +195,8 @@ def main(args=None):
                 'min_range_m': f'{min_rng:.3f}', 'steps': steps,
                 'min_alt_m': f'{min_alt:.3f}',
                 'cbf_active_frac': (f'{n_active / max(steps, 1):.3f}'
-                                    if cbf is not None else '')})
+                                    if cbf is not None else ''),
+                'step_dt_s': f'{env._t / max(steps, 1):.4f}'})
             fcsv.flush()
         if args.traj_dir and rows:
             name = (f'{label}__{args.target_policy}_{args.target_speed:g}'
