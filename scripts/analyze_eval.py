@@ -162,8 +162,9 @@ def main():
                         '(step_dt_s) exceed this')
     a = p.parse_args()
     df = pd.read_csv(os.path.join(a.run, 'episodes.csv'))
-    n_infra = int(df.outcome.isin(INFRA).sum())
-    df = df[~df.outcome.isin(INFRA)]
+    bad_reset = (df['target_ready'] == 0) if 'target_ready' in df else False
+    n_infra = int((df.outcome.isin(INFRA) | bad_reset).sum())
+    df = df[~(df.outcome.isin(INFRA) | bad_reset)]   # stack faults / target not at start
     n_slow = 0
     if a.max_step_dt and 'step_dt_s' in df:   # control period stretched by load
         slow = pd.to_numeric(df.step_dt_s, errors='coerce') > a.max_step_dt

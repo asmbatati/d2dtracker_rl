@@ -25,7 +25,8 @@ DOMAIN_BASE=${DOMAIN_BASE:-19}
 RUN_ID=${RUN_ID:-ihunter_eval}
 SEED=${SEED:-200}
 CBF=${CBF:-1}
-SPEED_FACTOR=${SPEED_FACTOR:-4}   # lower it on a loaded machine (see step_dt_s)
+SPEED_FACTOR=${SPEED_FACTOR:-4}
+STEP_MODE=${STEP_MODE:-lockstep}   # exact 0.05 s control period, load-independent
 PKG=$(cd "$(dirname "$0")/.." && pwd)
 CK=${CKPT_DIR:-$PKG/checkpoints/intercept}
 mkdir -p "$OUT/traj" "$OUT/logs"
@@ -48,7 +49,7 @@ run_cell() {  # label target speed args...
   ros2 run d2dtracker_rl evaluate_intercept "$@" --label "$label" \
     --target-policy "$target" --target-speed "$speed" --episodes "$EPS" \
     --seed "$SEED" --rank "$PAIR_RANK" --domain-base "$DOMAIN_BASE" \
-    --speed-factor "$SPEED_FACTOR" \
+    --speed-factor "$SPEED_FACTOR" --step-mode "$STEP_MODE" \
     --run-id "$RUN_ID" --csv "$CSV" --traj-dir "$OUT/traj" \
     > "$OUT/logs/${label}__${target}_${speed}.log" 2>&1
   tail -4 "$OUT/logs/${label}__${target}_${speed}.log" | sed 's/^/    /'

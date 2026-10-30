@@ -35,7 +35,7 @@ import numpy as np
 
 CSV_FIELDS = ['policy', 'model', 'target_policy', 'target_speed', 'episode',
               'seed', 'outcome', 't_s', 'min_range_m', 'steps', 'min_alt_m',
-              'cbf_active_frac', 'step_dt_s']
+              'cbf_active_frac', 'step_dt_s', 'target_ready']
 
 
 class ScriptedPolicy:
@@ -95,6 +95,9 @@ def main(args=None):
                    help='names the stack (GZ_PARTITION aerogym_<run-id>_<2*rank>)')
     p.add_argument('--seed', type=int, default=100)
     p.add_argument('--device', default='cpu', help='torch device for the policy')
+    p.add_argument('--step-mode', default='free', choices=['free', 'lockstep'],
+                   help="'lockstep' holds the world paused between steps so the "
+                        'control period is exactly control_dt')
     p.add_argument('--csv', default=None, help='append per-episode rows here')
     p.add_argument('--traj-dir', default=None, help='save per-episode .npz here')
     p.add_argument('--label', default=None,
@@ -107,7 +110,7 @@ def main(args=None):
     if args.policy == 'model' and not args.model:
         p.error('--model is required for --policy model')
 
-    eval_cfg = {'target_policy': args.target_policy}
+    eval_cfg = {'target_policy': args.target_policy, 'step_mode': args.step_mode}
     if args.target_policy in ('constant_velocity', 'evasive'):
         eval_cfg['target_policy_params'] = {'velocity': [args.target_speed, 0.0, 0.0]}
 
@@ -196,7 +199,8 @@ def main(args=None):
                 'min_alt_m': f'{min_alt:.3f}',
                 'cbf_active_frac': (f'{n_active / max(steps, 1):.3f}'
                                     if cbf is not None else ''),
-                'step_dt_s': f'{env._t / max(steps, 1):.4f}'})
+                'step_dt_s': f'{env._t / max(steps, 1):.4f}',
+                'target_ready': int(getattr(env, 'target_ready', True))})
             fcsv.flush()
         if args.traj_dir and rows:
             name = (f'{label}__{args.target_policy}_{args.target_speed:g}'

@@ -39,6 +39,9 @@ def main(args=None):
     p.add_argument('--learning-rate', type=float, default=3e-4,
                    help='optimizer LR; drop to ~1e-4 for a stable bootstrap '
                         'refine (the 3e-4 from-scratch run diverged past ~120k)')
+    p.add_argument('--step-mode', default='free', choices=['free', 'lockstep'],
+                   help="'lockstep': exact control period, independent of the "
+                        'learner\'s compute time and machine load')
     p.add_argument('--device', default='auto',
                    help="torch device for SB3 ('cpu' keeps a shared GPU free; "
                         'the MLP policy trains at the same speed, sim-bound)')
@@ -51,6 +54,7 @@ def main(args=None):
         with open(args.env_config) as f:
             env_cfg = yaml.safe_load(f) or {}
     env_cfg['target_policy'] = args.target_policy
+    env_cfg['step_mode'] = args.step_mode
     # Soft curriculum jump: a slow moving target (default 0.5 m/s) is reachable
     # from the static policy. Applies to constant_velocity and evasive.
     if args.target_policy in ('constant_velocity', 'evasive'):

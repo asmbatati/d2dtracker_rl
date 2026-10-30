@@ -53,6 +53,7 @@ class InterceptEnv(BasePX4Env):
         self._tspawn = np.asarray(self.cfg['target_spawn'], dtype=float)
         self._target_policy = None
         self._target_start = self._tspawn + [0, 0, self.cfg['target_altitude']]
+        self.target_ready = False   # set by reset(): target airborne at its start
 
     # --- state ---------------------------------------------------------------
     def _state(self):
@@ -174,7 +175,13 @@ class InterceptEnv(BasePX4Env):
         # interceptor recovery first (target uncommanded here), then co-settle
         # BOTH to their starts so they are airborne when the episode begins
         obs, info = super().reset(seed=seed, options=options)
-        self._cosettle(self._spawn, start)
+        self._run_world()        # lockstep: co-settle needs a running world
+        for _ in range(2):       # a knocked-down target can need a second pass
+            self._cosettle(self._spawn, start)
+            self.target_ready = self._target_airborne() and self._target_near(start)
+            if self.target_ready:
+                break
+        self._hold_world()
         # restart the episode clock after ALL recovery so t=0 is the true start
         self._t0 = self.ros.sim_time() if self.use_sim_time else None
         self._t = 0.0
