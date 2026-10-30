@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="playback">
+    <physics name="p" type="bullet-featherstone"><max_step_size>0.004</max_step_size><real_time_factor>1</real_time_factor><real_time_update_rate>250</real_time_update_rate></physics>
+    <gravity>0 0 0</gravity>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+    <scene><grid>true</grid><ambient>0.75 0.75 0.75 1</ambient><background>0.65 0.8 1.0 1</background><shadows>true</shadows></scene>
+    <light type="directional" name="sun"><cast_shadows>true</cast_shadows><pose>0 0 30 0 0 0</pose>
+      <diffuse>0.95 0.95 0.92 1</diffuse><specular>0.35 0.35 0.35 1</specular><direction>-0.4 0.25 -0.88</direction></light>
+    <model name="ground"><static>true</static><link name="l">
+      <visual name="v"><geometry><plane><normal>0 0 1</normal><size>800 800</size></plane></geometry>
+      <material><ambient>0.45 0.55 0.42 1</ambient><diffuse>0.5 0.62 0.48 1</diffuse></material></visual></link></model>
+    <include><uri>model://x500</uri><name>icept</name><pose>0 0 5 0 0 0</pose></include>
+    <include><uri>model://x500</uri><name>tgt</name><pose>10 0 5 0 0 0</pose></include>
+    <model name="video_cam"><static>true</static><pose>-12 -10 9 0 0.3 0.6</pose><link name="l">
+      <sensor name="cam" type="camera"><camera><horizontal_fov>1.05</horizontal_fov>
+        <image><width>1280</width><height>720</height></image><clip><near>0.1</near><far>4000</far></clip></camera>
+        <always_on>1</always_on><update_rate>30</update_rate><topic>video_cam</topic></sensor></link></model>
+  </world>
+</sdf>
