@@ -58,7 +58,8 @@ def summarize(df):
         n = len(g)
         cap = g[g.outcome == 'capture']
         p, lo, hi = wilson(len(cap), n)
-        act = pd.to_numeric(g.get('cbf_active_frac'), errors='coerce')
+        act = (pd.to_numeric(g['cbf_active_frac'], errors='coerce')
+               if 'cbf_active_frac' in g else pd.Series(dtype=float))
         rows.append({
             'target_policy': tp, 'target_speed': spd, 'policy': pol,
             'episodes': n, 'captures': len(cap), 'capture_rate': p,
@@ -67,10 +68,11 @@ def summarize(df):
             'min_range_median_m': g.min_range_m.median(),
             'crash': int(g.outcome.str.contains('crash').sum()),
             'out_of_bounds': int(g.outcome.str.contains('oob|bound').sum()),
-            'min_alt_m': pd.to_numeric(g.get('min_alt_m'), errors='coerce').min(),
+            'min_alt_m': (pd.to_numeric(g['min_alt_m'], errors='coerce').min()
+                          if 'min_alt_m' in g else np.nan),
             'cbf_active_mean': act.mean() if act.notna().any() else np.nan,
-            'step_dt_median_s': pd.to_numeric(g.get('step_dt_s'),
-                                              errors='coerce').median(),
+            'step_dt_median_s': (pd.to_numeric(g['step_dt_s'], errors='coerce').median()
+                                 if 'step_dt_s' in g else np.nan),
         })
     return pd.DataFrame(rows)
 
@@ -89,7 +91,7 @@ def write_md(s, path):
             f'{r.captures}/{r.episodes} | {r.capture_rate:.0%} '
             f'({r.ci_lo:.0%}–{r.ci_hi:.0%}) | {t} | {r.min_range_median_m:.2f} | '
             f'{r.crash} / {r.out_of_bounds} | {alt} | {act} | '
-            f'{r.step_dt_median_s:.3f} |')
+            f'{"—" if np.isnan(r.step_dt_median_s) else f"{r.step_dt_median_s:.3f}"} |')
     with open(path, 'w') as f:
         f.write('\n'.join(lines) + '\n')
 
