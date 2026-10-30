@@ -69,6 +69,8 @@ def summarize(df):
             'out_of_bounds': int(g.outcome.str.contains('oob|bound').sum()),
             'min_alt_m': pd.to_numeric(g.get('min_alt_m'), errors='coerce').min(),
             'cbf_active_mean': act.mean() if act.notna().any() else np.nan,
+            'step_dt_median_s': pd.to_numeric(g.get('step_dt_s'),
+                                              errors='coerce').median(),
         })
     return pd.DataFrame(rows)
 
@@ -76,8 +78,8 @@ def summarize(df):
 def write_md(s, path):
     lines = ['| target | speed (m/s) | policy | captures | capture rate (95 % CI) | '
              'median t_capture (s) | median closest (m) | crash / oob | '
-             'lowest alt (m) | CBF active |',
-             '|---|---|---|---|---|---|---|---|---|---|']
+             'lowest alt (m) | CBF active | s/step |',
+             '|---|---|---|---|---|---|---|---|---|---|---|']
     for r in s.itertuples():
         t = '—' if np.isnan(r.t_capture_median_s) else f'{r.t_capture_median_s:.1f}'
         alt = '—' if np.isnan(r.min_alt_m) else f'{r.min_alt_m:.2f}'
@@ -86,7 +88,8 @@ def write_md(s, path):
             f'| {r.target_policy} | {r.target_speed:g} | `{r.policy}` | '
             f'{r.captures}/{r.episodes} | {r.capture_rate:.0%} '
             f'({r.ci_lo:.0%}–{r.ci_hi:.0%}) | {t} | {r.min_range_median_m:.2f} | '
-            f'{r.crash} / {r.out_of_bounds} | {alt} | {act} |')
+            f'{r.crash} / {r.out_of_bounds} | {alt} | {act} | '
+            f'{r.step_dt_median_s:.3f} |')
     with open(path, 'w') as f:
         f.write('\n'.join(lines) + '\n')
 
@@ -152,16 +155,16 @@ def fig_targets(s, policies, path):
 def main():
     p = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     p.add_argument('run', help='eval_matrix.sh output dir (holds episodes.csv)')
-    p.add_argument('--control-dt', type=float, default=0.05,
-                   help='env control period; episodes whose mean step exceeds '
-                        '1.1x this are excluded')
+    p.add_argument('--max-step-dt', type=float, default=None,
+                   help='exclude episodes whose mean sim seconds per step '
+                        '(step_dt_s) exceed this')
     a = p.parse_args()
     df = pd.read_csv(os.path.join(a.run, 'episodes.csv'))
     n_infra = int(df.outcome.isin(INFRA).sum())
     df = df[~df.outcome.isin(INFRA)]
     n_slow = 0
-    if 'step_dt_s' in df:   # control period stretched by CPU load: not comparable
-        slow = pd.to_numeric(df.step_dt_s, errors='coerce') > 1.1 * a.control_dt
+    if a.max_step_dt and 'step_dt_s' in df:   # control period stretched by load
+        slow = pd.to_numeric(df.step_dt_s, errors='coerce') > a.max_step_dt
         n_slow = int(slow.sum())
         df = df[~slow]
     out = os.path.join(a.run, 'report')
