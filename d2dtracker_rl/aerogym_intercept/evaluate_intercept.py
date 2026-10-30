@@ -10,6 +10,8 @@ learned policy's:
 
 * ``--policy pn``      -- the PN velocity law of ``d2dtracker_interception``
   (N 3, closing speed 6 m/s, cap ``v_max``), the sim benchmark's PN baseline;
+* ``--policy pn_int``   -- constant-speed PN integrated on the commanded
+  velocity (``pn_integrated_velocity``, speed 6 m/s);
 * ``--policy pursuit`` -- pure pursuit: fly the line of sight at ``v_max``.
 
 ``--cbf`` passes every action (learned or scripted) through the CBF safety
@@ -40,12 +42,22 @@ class ScriptedPolicy:
         self.dt = float(env.control_dt)
         self.nav_gain = nav_gain
         self.closing_speed = closing_speed
+        self.v_cmd = None
+
+    def reset(self):
+        self.v_cmd = None
 
     def predict(self, obs, deterministic=True):
         st = self.env._state()
         ipos, ivel = st['position'], st['velocity']
         tpos, tvel = st['target_position'], st['target_velocity']
-        if self.kind == 'pn':
+        if self.kind == 'pn_int':
+            from d2dtracker_interception.guidance import pn_integrated_velocity
+            v = pn_integrated_velocity(self.v_cmd, ipos, ivel, tpos, tvel,
+                                       self.closing_speed, N=self.nav_gain,
+                                       dt=self.dt)
+            self.v_cmd = v
+        elif self.kind == 'pn':
             from d2dtracker_interception.guidance import pn_velocity_command
             v = pn_velocity_command(ipos, ivel, tpos, tvel, self.v_max,
                                     N=self.nav_gain, dt=self.dt,
@@ -61,7 +73,8 @@ def main(args=None):
     p = argparse.ArgumentParser(description='AeroGym interception evaluator')
     p.add_argument('--model', default=None,
                    help='SB3 .zip (required for --policy model)')
-    p.add_argument('--policy', default='model', choices=['model', 'pn', 'pursuit'])
+    p.add_argument('--policy', default='model',
+                   choices=['model', 'pn', 'pn_int', 'pursuit'])
     p.add_argument('--episodes', type=int, default=10)
     p.add_argument('--target-policy', default='static')
     p.add_argument('--target-speed', type=float, default=0.5,
@@ -138,6 +151,8 @@ def main(args=None):
     for ep in range(args.episodes):
         seed = args.seed + ep
         obs, _ = env.reset(seed=seed)
+        if hasattr(model, 'reset'):
+            model.reset()
         done = trunc = False
         min_rng, min_alt, n_active = float('inf'), float('inf'), 0
         rows, steps, info = [], 0, {}

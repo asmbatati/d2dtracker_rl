@@ -5,7 +5,7 @@
 #
 # For every target policy (static, constant_velocity, evasive) and target speed
 # in SPEEDS (moving targets only; default "0.5"), runs evaluate_intercept for
-# the three curriculum models plus --policy pn and --policy pursuit (and, with
+# the three curriculum models plus --policy pn, pn_int and pursuit (and, with
 # CBF=1, the default, PN / pursuit / the evasive model behind the CBF safety
 # filter, labelled <name>+cbf), appending
 # one row per episode to OUT_DIR/episodes.csv and saving trajectories under
@@ -59,6 +59,7 @@ for target in static constant_velocity evasive; do
       run_cell "$m" "$target" "$speed" --model "$CK/$m.zip"
     done
     run_cell pn "$target" "$speed" --policy pn
+    run_cell pn_int "$target" "$speed" --policy pn_int
     run_cell pursuit "$target" "$speed" --policy pursuit
     if [ "$CBF" = 1 ]; then
       run_cell pn+cbf "$target" "$speed" --policy pn --cbf
