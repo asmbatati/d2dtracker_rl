@@ -26,6 +26,10 @@ def main(args=None):
     p.add_argument('--pair-rank', type=int, default=0,
                    help='worker pair rank (PX4 instances 2r/2r+1); pick one '
                         'whose instances no other run uses')
+    p.add_argument('--domain-base', type=int, default=100,
+                   help='ROS_DOMAIN_ID of a stack = domain_base + 2*pair_rank')
+    p.add_argument('--run-id', default=None,
+                   help='names the stacks (default icpt_<target-policy>)')
     p.add_argument('--seed', type=int, default=0)
     p.add_argument('--target-speed', type=float, default=0.5,
                    help='moving-target speed (m/s) for constant_velocity/evasive')
@@ -54,8 +58,9 @@ def main(args=None):
     from . import task  # noqa: F401  (registers 'intercept' in aerogym TASKS)
     from .worker import make_intercept_vec_env
     env = make_intercept_vec_env(args.n_envs, env_cfg,
-                                 run_id=f'icpt_{args.target_policy}',
+                                 run_id=args.run_id or f'icpt_{args.target_policy}',
                                  speed_factor=args.speed_factor,
+                                 domain_base=args.domain_base,
                                  seed=args.seed, rank_offset=args.pair_rank)
 
     from stable_baselines3 import PPO, SAC
