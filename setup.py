@@ -30,6 +30,7 @@ setup(
             'curriculum = d2dtracker_rl.curriculum:main',
             'train_intercept = d2dtracker_rl.aerogym_intercept.train_intercept:main',
             'evaluate_intercept = d2dtracker_rl.aerogym_intercept.evaluate_intercept:main',
+            'policy_head = d2dtracker_rl.aerogym_intercept.policy_head:main',
         ],
     },
 )

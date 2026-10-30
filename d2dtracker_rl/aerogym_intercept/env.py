@@ -16,6 +16,7 @@ import time
 import numpy as np
 
 from aerogym_px4.core.base_env import BasePX4Env
+from d2dtracker_interception.frames import odom_velocity_world
 from aerogym_px4.core.px4_reset import gz_set_entity_pose
 from aerogym_px4.core.ros_interface import VehicleRosInterface
 
@@ -60,9 +61,12 @@ class InterceptEnv(BasePX4Env):
             return None
         todom = self.target_ros.odom()
         if todom is not None:
-            p, v = todom.pose.pose.position, todom.twist.twist.linear
+            p = todom.pose.pose.position
             state['target_position'] = np.array([p.x, p.y, p.z]) + self._tspawn
-            state['target_velocity'] = np.array([v.x, v.y, v.z])
+            # MAVROS odom twist is body-frame; the scripted target holds yaw 0
+            # (body = world, so trained policies are unaffected), but rotate it
+            # so a yawing target reports its true world velocity
+            state['target_velocity'] = odom_velocity_world(todom)
         else:
             state['target_position'] = np.asarray(self._target_start, dtype=float)
             state['target_velocity'] = np.zeros(3)
