@@ -106,6 +106,16 @@ class InterceptEnv(BasePX4Env):
         return (f'armed={st.armed} mode={st.mode} z={p.z:.2f} '
                 f'off_start={np.linalg.norm(pos - np.asarray(start, float)):.2f} m')
 
+    def _target_escaped(self, start, tol=10.0):
+        """Target estimate non-finite or still far off its start after co-settle."""
+        todom = self.target_ros.odom()
+        if todom is None:
+            return False
+        p = todom.pose.pose.position
+        pos = np.array([p.x, p.y, p.z]) + self._tspawn
+        return (not np.all(np.isfinite(pos))
+                or float(np.linalg.norm(pos - np.asarray(start, float))) > tol)
+
     def _target_near(self, start, tol=2.5):
         todom = self.target_ros.odom()
         if todom is None:
@@ -194,6 +204,23 @@ class InterceptEnv(BasePX4Env):
         if not self.target_ready:
             print(f'[intercept_env] target not at start after reset ({how}): '
                   f'{self._target_status(start)}', flush=True)
+            if self.sim is not None and self._target_escaped(start):
+                # a teleport cannot heal a diverged target estimator (observed
+                # after collisions: z estimate climbing past 270 m while armed
+                # in OFFBOARD); reboot both PX4s and reset again
+                print('[intercept_env] target estimator diverged: restarting '
+                      'the stack', flush=True)
+                self.sim.restart()
+                self._wait_stack_ready()
+                obs, info = super().reset(seed=seed, options=options)
+                self._run_world()
+                how = self._cosettle(self._spawn, start)
+                self.target_ready = (self._target_airborne()
+                                     and self._target_near(start))
+                if not self.target_ready:
+                    print(f'[intercept_env] target still off start after the '
+                          f'restart ({how}): {self._target_status(start)}',
+                          flush=True)
         self._hold_world()
         # restart the episode clock after ALL recovery so t=0 is the true start
         self._t0 = self.ros.sim_time() if self.use_sim_time else None
