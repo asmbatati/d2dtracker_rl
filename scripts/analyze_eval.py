@@ -136,7 +136,8 @@ def fig_targets(s, policies, path):
             ax.bar(i, r.capture_rate, width=0.6, color=SERIES[i % len(SERIES)],
                    edgecolor='white', linewidth=2)
             ax.errorbar(i, r.capture_rate,
-                        yerr=[[r.capture_rate - r.ci_lo], [r.ci_hi - r.capture_rate]],
+                        yerr=[[max(0.0, r.capture_rate - r.ci_lo)],
+                              [max(0.0, r.ci_hi - r.capture_rate)]],
                         color=INK2, capsize=3, linewidth=1)
             ax.text(i, min(r.ci_hi, 1.0) + 0.03, f'{r.captures}/{r.episodes}',
                     ha='center', fontsize=7, color=INK)
