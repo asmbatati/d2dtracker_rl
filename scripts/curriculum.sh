@@ -17,10 +17,14 @@
 #   # C6: speed curriculum, continuing from the evasive model
 #   INIT=checkpoints/lockstep/model_evasive_0.5.zip \
 #     scripts/curriculum.sh checkpoints/speed "evasive:1.0 evasive:2.0 evasive:3.0" 60000
+#   # C11: C9 with 55 s episodes (1100 steps), the length the June models had
+#   EPISODE_STEPS=1100 \
+#     scripts/curriculum.sh checkpoints/lockstep_55s "static:0 constant_velocity:0.5 evasive:0.5" 40000
 #
 # Everything runs on the CPU (the GPU stays free for other sessions)
 # and on one stack: PAIR_RANK, DOMAIN_BASE, RUN_ID as in eval_matrix.sh.
-# STEP_MODE defaults to lockstep. Logs: OUT_DIR/<target>_<speed>/*.log.
+# STEP_MODE defaults to lockstep; EPISODE_STEPS (env default 400) sets the
+# episode length for training and for checkpoint selection. Logs: OUT_DIR/<target>_<speed>/*.log.
 set -u
 OUT=${1:?usage: curriculum.sh OUT_DIR "STAGES" [STEPS]}
 STAGES=${2:?usage: curriculum.sh OUT_DIR "STAGES" [STEPS]}
@@ -32,11 +36,12 @@ STEP_MODE=${STEP_MODE:-lockstep}
 SPEED_FACTOR=${SPEED_FACTOR:-4}
 EVAL_EPS=${EVAL_EPS:-10}
 SELECT_SEED=${SELECT_SEED:-100}
+EPISODE_STEPS=${EPISODE_STEPS:-}
 PKG=$(cd "$(dirname "$0")/.." && pwd)
 cd "$PKG" || exit 1
 INIT=${INIT:-checkpoints/intercept/model_static_refine_40k.zip}
 STACK=(--domain-base "$DOMAIN_BASE" --run-id "$RUN_ID" --speed-factor "$SPEED_FACTOR"
-       --step-mode "$STEP_MODE")
+       --step-mode "$STEP_MODE" ${EPISODE_STEPS:+--episode-steps "$EPISODE_STEPS"})
 
 for stage in $STAGES; do
   target=${stage%%:*} speed=${stage##*:}

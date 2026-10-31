@@ -8,6 +8,8 @@ Reads ``<run>/episodes.csv`` (one row per deterministic episode) and writes to
   episodes, captures, capture rate with a Wilson 95 % interval, median capture
   time, median closest approach, crashes / out-of-bounds, lowest altitude and,
   for ``+cbf`` rows, the fraction of steps the filter changed the command;
+  with ``--budget S``, also the captures made within S seconds, which gives
+  the capture rate under a shorter episode from the same run;
 * ``capture_vs_speed.png`` - capture rate against target speed, one panel per
   moving-target policy, one line per policy (when several speeds were run);
 * ``capture_by_target.png`` - capture rate per policy at each target policy
@@ -81,7 +83,7 @@ def row_key(r):
             policy_key(r['policy']))
 
 
-def summarize(df):
+def summarize(df, budget=None):
     rows = []
     keys = ['target_policy', 'target_speed', 'policy']
     for (tp, spd, pol), g in df.groupby(keys, sort=False):
@@ -90,7 +92,7 @@ def summarize(df):
         p, lo, hi = wilson(len(cap), n)
         act = (pd.to_numeric(g['cbf_active_frac'], errors='coerce')
                if 'cbf_active_frac' in g else pd.Series(dtype=float))
-        rows.append({
+        row = {
             'target_policy': tp, 'target_speed': spd, 'policy': pol,
             'episodes': n, 'captures': len(cap), 'capture_rate': p,
             'ci_lo': lo, 'ci_hi': hi,
@@ -103,23 +105,28 @@ def summarize(df):
             'cbf_active_mean': act.mean() if act.notna().any() else np.nan,
             'step_dt_median_s': (pd.to_numeric(g['step_dt_s'], errors='coerce').median()
                                  if 'step_dt_s' in g else np.nan),
-        })
+        }
+        if budget:
+            row['captures_in_budget'] = int((cap.t_s <= budget).sum())
+        rows.append(row)
     return pd.DataFrame(sorted(rows, key=row_key))   # CSV order follows re-runs
 
 
-def write_md(s, path):
+def write_md(s, path, budget=None):
+    extra = f'captures ≤ {budget:g} s | ' if budget else ''
     lines = ['| target | speed (m/s) | policy | captures | capture rate (95 % CI) | '
-             'median t_capture (s) | median closest (m) | crash / oob | '
+             f'{extra}median t_capture (s) | median closest (m) | crash / oob | '
              'lowest alt (m) | CBF active | s/step |',
-             '|---|---|---|---|---|---|---|---|---|---|---|']
+             '|---|---|---|---|---|---|---|---|---|---|---|' + ('---|' if budget else '')]
     for r in s.itertuples():
         t = '—' if np.isnan(r.t_capture_median_s) else f'{r.t_capture_median_s:.1f}'
         alt = '—' if np.isnan(r.min_alt_m) else f'{r.min_alt_m:.2f}'
         act = '' if np.isnan(r.cbf_active_mean) else f'{r.cbf_active_mean:.0%}'
+        inb = f'{r.captures_in_budget}/{r.episodes} | ' if budget else ''
         lines.append(
             f'| {r.target_policy} | {r.target_speed:g} | `{r.policy}` | '
             f'{r.captures}/{r.episodes} | {r.capture_rate:.0%} '
-            f'({r.ci_lo:.0%}–{r.ci_hi:.0%}) | {t} | {r.min_range_median_m:.2f} | '
+            f'({r.ci_lo:.0%}–{r.ci_hi:.0%}) | {inb}{t} | {r.min_range_median_m:.2f} | '
             f'{r.crash} / {r.out_of_bounds} | {alt} | {act} | '
             f'{"—" if np.isnan(r.step_dt_median_s) else f"{r.step_dt_median_s:.3f}"} |')
     with open(path, 'w') as f:
@@ -195,6 +202,8 @@ def main():
     p.add_argument('--max-step-dt', type=float, default=None,
                    help='exclude episodes whose mean sim seconds per step '
                         '(step_dt_s) exceed this')
+    p.add_argument('--budget', type=float, default=None,
+                   help='also count the captures made within this many seconds')
     a = p.parse_args()
     df = pd.read_csv(os.path.join(a.run, 'episodes.csv'))
     bad_reset = (df['target_ready'] == 0) if 'target_ready' in df else False
@@ -208,9 +217,9 @@ def main():
     out = os.path.join(a.run, 'report')
     os.makedirs(out, exist_ok=True)
     policies = sorted(dict.fromkeys(df.policy), key=policy_key)
-    s = summarize(df)
+    s = summarize(df, a.budget)
     s.to_csv(os.path.join(out, 'summary.csv'), index=False, float_format='%.3f')
-    write_md(s, os.path.join(out, 'summary.md'))
+    write_md(s, os.path.join(out, 'summary.md'), a.budget)
     fig_targets(s, policies, os.path.join(out, 'capture_by_target.png'))
     fig_speed(s, policies, os.path.join(out, 'capture_vs_speed.png'))
     print(open(os.path.join(out, 'summary.md')).read())

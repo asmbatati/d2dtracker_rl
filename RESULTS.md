@@ -264,8 +264,60 @@ re-run with `--episode-steps 1100` (55 s), seed 200, 30 episodes (data:
   time. Compare
   rates between runs, not single episodes.
 
-The whole matrix is being re-run with 55 s episodes; capture times in that run
-give the 20 s rates as well.
+### The whole matrix at 55 s (ROADMAP C10)
+
+All 13 policies again with `EPISODE_STEPS=1100` (55 s), seed 200, 30
+episodes per cell, on stack 2. 1170 episodes; 2 are excluded because the
+target was not at its start. The bracketed numbers are the captures made
+within 20 s in the same run (`analyze_eval.py --budget 20`). Data, table and
+figure: [`docs/eval/2026-10-31_lockstep_55s/`](docs/eval/2026-10-31_lockstep_55s/);
+trajectories (18 MB) stay in `~/drone_interception_ws/rl_eval/2026-10-31_lockstep_55s/`.
+
+![capture rate by target, 55 s episodes](docs/eval/2026-10-31_lockstep_55s/capture_by_target.png)
+
+| policy | static | constant velocity | evasive |
+|---|---|---|---|
+| `model_static_0` (lockstep) | 22 (20) | 17 (17) | 23 (18) |
+| `model_static_refine_40k` (June) | 26 (21) | 23 (16) | 24 (15) |
+| `model_constant_velocity_0.5` (lockstep) | 29 (29) | 27 (26) | 20 (13) |
+| `model_cv_40k` (June) | **30 (30)** | **28 (28)** | **26 (25)** |
+| `model_evasive_0.5` (lockstep) | 20 (14) | 17 (12) | 10 (6) |
+| `model_evasive_40k` (June) | 26 (25) | 26 (25) | 23 (21) |
+| `pn` | 30 (30) | 30 (30) | 29 (29) |
+| `pn_int` | 22 (22) | 17 (17) | 12 (12) |
+| `pursuit` | 30 (30) | 29 (29) | 30 (30) |
+| `model_evasive_0.5` + CBF | 20 of 29 (17) | 16 (15) | 15 (9) |
+| `model_evasive_40k` + CBF | 27 (25) | 23 (22) | 28 (22) |
+| `pn` + CBF | 28 (28) | 28 (28) | 29 (29) |
+| `pursuit` + CBF | 29 of 29 (29) | 29 (29) | 30 (30) |
+
+- **Given 55 s, the best RL policy nearly matches the scripted laws.**
+  `model_cv_40k` captures 30, 28 and 26 of 30, against 30, 30, 29 for PN and
+  30, 29, 30 for pursuit. Its median capture time (3.6–4.0 s) lies between
+  pursuit's (2.0–4.2 s) and PN's (5.1–6.0 s).
+- **Only the RL policies gain from the longer episode.** Within this run the
+  June models go from 206 to 232 of 270 captures between 20 s and 55 s, the
+  lockstep models from 155 to 185, the RL policies behind the CBF from 110 to
+  129. The scripted laws make all 402 of their captures within 20 s.
+- **At 55 s the June models beat the lockstep retrain,** 232 against 185 of
+  270. The gap is widest at the evasive stage: `model_evasive_0.5` captures 10
+  of 30 evasive targets and leaves the arena in 12, where `model_evasive_40k`
+  captures 23. The June models trained on episodes of about 55 s, the retrain
+  on 20 s ones. ROADMAP C11 retrains the curriculum with 55 s episodes to test
+  whether that is the cause.
+- **Behind the CBF the June evasive model captures 28 of 30 evasive targets**
+  (23 without; crash or out of bounds 6 → 1). Against the constant-velocity
+  target it does worse with the filter (26 → 23), within the run-to-run
+  spread below.
+- **A cell's result varies more between runs than sampling explains.** The
+  bracketed 20 s counts repeat the 20 s matrix above: same seed, same budget.
+  The scripted cells agree within 1.2 captures on average (at most 5). The RL
+  cells differ by 4–5 on average and by up to 9 (lockstep
+  `model_constant_velocity_0.5` against the evasive target: 22, then 13), where
+  binomial sampling alone gives about 3. Summed over the June models the two
+  runs give 173 and 206 of 270. So a difference of a few captures between two
+  RL cells of one run is not a finding; the paper should pool runs or use more
+  episodes per cell.
 
 ## Environment note
 
