@@ -10,7 +10,13 @@
 # filter, labelled <name>+cbf), appending
 # one row per episode to OUT_DIR/episodes.csv and saving trajectories under
 # OUT_DIR/traj/. Cells that already have EPISODES rows are skipped, so the
-# script can be re-run to resume.
+# script can be re-run to resume. MODELS (names in CKPT_DIR, default the three
+# June models) and CBF_MODEL (default model_evasive_40k) select the policies.
+#
+#   # lockstep-retrained models (C9) into the same matrix: baselines are skipped
+#   CKPT_DIR=checkpoints/lockstep CBF_MODEL=model_evasive_0.5 \
+#     MODELS="model_static_0 model_constant_velocity_0.5 model_evasive_0.5" \
+#     scripts/eval_matrix.sh ~/rl_eval/2026-10-31_lockstep
 #
 # Isolation (shared machine): PAIR_RANK selects PX4 instances 2r/2r+1,
 # DOMAIN_BASE + 2*PAIR_RANK is the stack's ROS_DOMAIN_ID, RUN_ID names the gz
@@ -29,6 +35,8 @@ SPEED_FACTOR=${SPEED_FACTOR:-4}
 STEP_MODE=${STEP_MODE:-lockstep}   # exact 0.05 s control period, load-independent
 PKG=$(cd "$(dirname "$0")/.." && pwd)
 CK=${CKPT_DIR:-$PKG/checkpoints/intercept}
+MODELS=${MODELS:-model_static_refine_40k model_cv_40k model_evasive_40k}
+CBF_MODEL=${CBF_MODEL:-model_evasive_40k}
 mkdir -p "$OUT/traj" "$OUT/logs"
 CSV=$OUT/episodes.csv
 
@@ -58,7 +66,7 @@ run_cell() {  # label target speed args...
 for target in static constant_velocity evasive; do
   if [ "$target" = static ]; then speeds=0; else speeds=$SPEEDS; fi
   for speed in $speeds; do
-    for m in model_static_refine_40k model_cv_40k model_evasive_40k; do
+    for m in $MODELS; do
       run_cell "$m" "$target" "$speed" --model "$CK/$m.zip"
     done
     run_cell pn "$target" "$speed" --policy pn
@@ -67,7 +75,7 @@ for target in static constant_velocity evasive; do
     if [ "$CBF" = 1 ]; then
       run_cell pn+cbf "$target" "$speed" --policy pn --cbf
       run_cell pursuit+cbf "$target" "$speed" --policy pursuit --cbf
-      run_cell model_evasive_40k+cbf "$target" "$speed" --model "$CK/model_evasive_40k.zip" --cbf
+      run_cell "$CBF_MODEL+cbf" "$target" "$speed" --model "$CK/$CBF_MODEL.zip" --cbf
     fi
   done
 done
