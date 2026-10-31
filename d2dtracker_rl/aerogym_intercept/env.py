@@ -97,6 +97,15 @@ class InterceptEnv(BasePX4Env):
         return (todom is not None and todom.pose.pose.position.z > 1.0
                 and self.target_ros.state().armed)
 
+    def _target_status(self, start):
+        st, todom = self.target_ros.state(), self.target_ros.odom()
+        if todom is None:
+            return f'armed={st.armed} mode={st.mode} no odometry'
+        p = todom.pose.pose.position
+        pos = np.array([p.x, p.y, p.z]) + self._tspawn
+        return (f'armed={st.armed} mode={st.mode} z={p.z:.2f} '
+                f'off_start={np.linalg.norm(pos - np.asarray(start, float)):.2f} m')
+
     def _target_near(self, start, tol=2.5):
         todom = self.target_ros.odom()
         if todom is None:
@@ -137,11 +146,12 @@ class InterceptEnv(BasePX4Env):
         while True:
             if (self._ready(spawn) and self._target_near(target_start)
                     and self._target_airborne()):
-                return
+                return 'settled'
             now = self.ros.sim_time()
-            if (self.use_sim_time and now is not None and now >= t_end) \
-                    or time.monotonic() >= deadline:
-                return
+            if self.use_sim_time and now is not None and now >= t_end:
+                return 'sim timeout'
+            if time.monotonic() >= deadline:
+                return f'wall timeout (sim time {now})'
             self.ros.publish_position_target(*spawn)     # hold interceptor
             si = self.ros.state()
             if si.mode != 'OFFBOARD':
@@ -177,10 +187,13 @@ class InterceptEnv(BasePX4Env):
         obs, info = super().reset(seed=seed, options=options)
         self._run_world()        # lockstep: co-settle needs a running world
         for _ in range(2):       # a knocked-down target can need a second pass
-            self._cosettle(self._spawn, start)
+            how = self._cosettle(self._spawn, start)
             self.target_ready = self._target_airborne() and self._target_near(start)
             if self.target_ready:
                 break
+        if not self.target_ready:
+            print(f'[intercept_env] target not at start after reset ({how}): '
+                  f'{self._target_status(start)}', flush=True)
         self._hold_world()
         # restart the episode clock after ALL recovery so t=0 is the true start
         self._t0 = self.ros.sim_time() if self.use_sim_time else None
