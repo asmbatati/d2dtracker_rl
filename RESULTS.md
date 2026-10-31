@@ -319,6 +319,45 @@ trajectories (18 MB) stay in `~/drone_interception_ws/rl_eval/2026-10-31_lockste
   RL cells of one run is not a finding; the paper should pool runs or use more
   episodes per cell.
 
+### Target-speed sweep at 55 s (ROADMAP C4)
+
+The two best June models and the scripted laws against targets at 0.5, 1, 2
+and 3 m/s, 55 s episodes, seed 200, 30 episodes per cell, no CBF. The static
+and 0.5 m/s cells are those of the 55 s matrix above; the 1–3 m/s cells ran on
+stack 1 (domain 21). 1350 episodes; 3 are excluded because the target was not
+at its start. Data, table and figure:
+[`docs/eval/2026-10-31_speed_sweep_55s/`](docs/eval/2026-10-31_speed_sweep_55s/).
+
+![capture rate against target speed](docs/eval/2026-10-31_speed_sweep_55s/capture_vs_speed.png)
+
+Captures of 30 (two cells have 29 valid episodes):
+
+| policy | cv 0.5 | cv 1 | cv 2 | cv 3 | evasive 0.5 | evasive 1 | evasive 2 | evasive 3 |
+|---|---|---|---|---|---|---|---|---|
+| `model_cv_40k` | 28 | 25 | 14 | 2 | 26 | 26 of 29 | 11 | 1 of 29 |
+| `model_evasive_40k` | 26 | 24 | 16 | 11 | 23 | 23 | 11 | 9 |
+| `pn` | 30 | 29 of 29 | 27 | 20 | 29 | 30 | 13 | 12 |
+| `pn_int` | 17 | 20 | 15 | 10 | 12 | 5 | 0 | 0 |
+| `pursuit` | 29 | 29 | 27 | **30** | 30 | 29 | **30** | **28** |
+
+- **Pure pursuit holds up at every speed:** 27–30 of 30 up to 3 m/s, median
+  capture time 2.0–4.2 s. It is the baseline the RL policies have to beat.
+- **PN falls off against the evasive target from 2 m/s** (13 and 12 of 30)
+  and against the constant-velocity target at 3 m/s (20 of 30). Its failures
+  end out of bounds (10–18 per cell), not in crashes: the chase lasts until the
+  pair reaches the 60 m arena limit, which a 3 m/s target heading straight out
+  reaches after about 17 s. This matches PN's 4 of 19 against the 2.4 m/s
+  circling target in the benchmark scene (`drone_interception_sim/BENCHMARKS.md`).
+- **The RL models, trained at 0.5 m/s, hold up to 1 m/s** (23–26 of 30) and
+  fall off from 2 m/s: 11–16 of 30 at 2 m/s. At 3 m/s the constant-velocity
+  model captures 1–2 of 30 and stays a median 5 m away; the evasive model
+  degrades less (9–11). This is the speed gap C5 met in the benchmark scene.
+- **Constant-speed PN (`pn_int`) is the weakest law:** 0 of 30 against the
+  evasive target from 2 m/s, almost all out of bounds.
+- The speed curriculum on 20 s episodes (ROADMAP C6) did not close this gap:
+  its stage models captured 1, 0 and 0 of 10 at 1, 2 and 3 m/s on the
+  selection seed, staying 5–7 m from the target.
+
 ## Environment note
 
 MAVROS must be rebuilt after a system `diagnostic_updater` update (ABI change) or
