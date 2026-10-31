@@ -49,6 +49,36 @@ def style(ax):
 
 
 INFRA = ['sim_stalled', 'state_invalid']   # stack faults, not policy outcomes
+TARGETS = ['static', 'constant_velocity', 'evasive']
+BASELINES = ['pn', 'pn_int', 'pursuit']
+STAGES = [('static',), ('cv', 'constant_velocity'), ('evasive',)]   # model names
+
+
+def policy_key(pol):
+    """Models in curriculum order, then the baselines, then the +cbf variants."""
+    base = pol.removesuffix('+cbf')
+    if base in BASELINES:
+        rank = (1, BASELINES.index(base))
+    else:
+        rank = (0, next((i for i, words in enumerate(STAGES)
+                         if any(w in base for w in words)), len(STAGES)))
+    return (pol.endswith('+cbf'),) + rank + (base,)
+
+
+FAMILIES = ['RL policy', 'scripted guidance', 'behind the CBF filter']
+
+
+def family(pol):
+    """Bar colour: what kind of controller, since each bar is labelled anyway."""
+    if pol.endswith('+cbf'):
+        return 2
+    return 1 if pol in BASELINES else 0
+
+
+def row_key(r):
+    tp = r['target_policy']
+    return (TARGETS.index(tp) if tp in TARGETS else len(TARGETS), r['target_speed'],
+            policy_key(r['policy']))
 
 
 def summarize(df):
@@ -74,7 +104,7 @@ def summarize(df):
             'step_dt_median_s': (pd.to_numeric(g['step_dt_s'], errors='coerce').median()
                                  if 'step_dt_s' in g else np.nan),
         })
-    return pd.DataFrame(rows)
+    return pd.DataFrame(sorted(rows, key=row_key))   # CSV order follows re-runs
 
 
 def write_md(s, path):
@@ -124,7 +154,7 @@ def fig_speed(s, policies, path):
 
 def fig_targets(s, policies, path):
     targets = list(dict.fromkeys(s.target_policy))
-    fig, axes = plt.subplots(1, len(targets), figsize=(3.8 * len(targets), 3.4),
+    fig, axes = plt.subplots(1, len(targets), figsize=(4.6 * len(targets), 3.6),
                              sharey=True, squeeze=False)
     for ax, tp in zip(axes[0], targets):
         sub = s[s.target_policy == tp]
@@ -133,14 +163,14 @@ def fig_targets(s, policies, path):
             if pol not in sub.index:
                 continue
             r = sub.loc[pol]
-            ax.bar(i, r.capture_rate, width=0.6, color=SERIES[i % len(SERIES)],
+            ax.bar(i, r.capture_rate, width=0.6, color=SERIES[family(pol)],
                    edgecolor='white', linewidth=2)
             ax.errorbar(i, r.capture_rate,
                         yerr=[[max(0.0, r.capture_rate - r.ci_lo)],
                               [max(0.0, r.ci_hi - r.capture_rate)]],
                         color=INK2, capsize=3, linewidth=1)
             ax.text(i, min(r.ci_hi, 1.0) + 0.03, f'{r.captures}/{r.episodes}',
-                    ha='center', fontsize=7, color=INK)
+                    ha='center', fontsize=6, color=INK)
         ax.set_xticks(range(len(policies)))
         ax.set_xticklabels(policies, rotation=35, ha='right', fontsize=7)
         spd = sub.target_speed.iloc[0] if len(sub) else 0
@@ -150,7 +180,11 @@ def fig_targets(s, policies, path):
         ax.set_ylim(0, 1.15)
         style(ax)
     axes[0][0].set_ylabel('capture rate (95 % Wilson CI)', fontsize=8, color=INK)
-    fig.tight_layout()
+    shown = sorted({family(p) for p in policies})
+    fig.legend([plt.Rectangle((0, 0), 1, 1, color=SERIES[k]) for k in shown],
+               [FAMILIES[k] for k in shown], fontsize=8, frameon=False,
+               loc='upper center', ncol=len(shown))
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     fig.savefig(path, dpi=200)
     plt.close(fig)
 
@@ -173,7 +207,7 @@ def main():
         df = df[~slow]
     out = os.path.join(a.run, 'report')
     os.makedirs(out, exist_ok=True)
-    policies = list(dict.fromkeys(df.policy))
+    policies = sorted(dict.fromkeys(df.policy), key=policy_key)
     s = summarize(df)
     s.to_csv(os.path.join(out, 'summary.csv'), index=False, float_format='%.3f')
     write_md(s, os.path.join(out, 'summary.md'))

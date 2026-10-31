@@ -147,7 +147,61 @@ different load. The 30 Oct re-evaluation of the static model gave 7/30 (vs 9/10
 in June) at 0.08 s/step. `evaluate_intercept` now logs `step_dt_s` per episode
 for this reason. The fix is deterministic stepping (pause the world, advance a
 fixed number of physics iterations per action), which makes the period exact
-and load-independent; see ROADMAP C8.
+and load-independent: AeroGym `step_mode: lockstep` (ROADMAP C8), used for the
+evaluation below.
+
+## Evaluation matrix in lockstep (31 Oct 2026)
+
+The three June stage models against the scripted guidance laws, with and
+without the CBF safety filter (ROADMAP C3, D2). Every step is exactly 0.05 s
+(`--step-mode lockstep`). 30 deterministic episodes per cell on the test seed
+200, the same episodes for every policy; moving targets at 0.5 m/s.
+`scripts/eval_matrix.sh` on stack 2 (PX4 instances 2–3, domain 31). 810
+episodes; 2 are excluded because the target was not at its start. Data, table
+and figure: [`docs/eval/2026-10-31_lockstep/`](docs/eval/2026-10-31_lockstep/).
+Trajectories (8.6 MB) and per-cell logs stay on the lab desktop in
+`~/drone_interception_ws/rl_eval/2026-10-31_lockstep/`.
+
+![capture rate by target](docs/eval/2026-10-31_lockstep/capture_by_target.png)
+
+| policy | static | constant velocity | evasive |
+|---|---|---|---|
+| `model_static_refine_40k` | 19/29 | 18/30 | 11/30 |
+| `model_cv_40k` | **28/30** | **23/30** | **21/30** |
+| `model_evasive_40k` | 18/29 | 19/30 | 16/30 |
+| `pn` (N = 3) | 30/30 | 29/30 | 30/30 |
+| `pn_int` (constant 6 m/s) | 17/30 | 19/30 | 11/30 |
+| `pursuit` | 29/30 | 30/30 | 29/30 |
+| `model_evasive_40k` + CBF | 28/30 | 27/30 | 16/30 |
+| `pn` + CBF | 30/30 | 29/30 | 30/30 |
+| `pursuit` + CBF | 29/30 | 30/30 | 30/30 |
+
+Wilson intervals, capture times, closest approach, crashes and lowest altitude
+are in [`summary.md`](docs/eval/2026-10-31_lockstep/summary.md).
+
+- **The June models capture far less at the exact 0.05 s period:** 11–28 of 30,
+  against 9/10–10/10 in June at about 0.14 s per step. They were trained at a
+  longer, load-dependent period, so these numbers measure them away from their
+  training conditions. C9 retrains the curriculum in lockstep.
+- **The constant-velocity model is the best RL policy on every target**
+  (28, 23, 21 of 30). The evasive refine that followed it is worse on all three
+  (18, 19, 16), so that stage did not help.
+- **RL failures are near misses and crashes.** The RL non-captures come within
+  a median 1.4–1.8 m of the target. `model_evasive_40k` crashed or left the
+  arena in 4–8 episodes per target, with its lowest altitude below 0 m.
+- **The CBF filter removes most of those crashes:** `model_evasive_40k` goes
+  from 18 to 28 captures on the static target and from 19 to 27 at constant
+  velocity (crash or out-of-bounds 6 → 1 and 8 → 1). Against the evasive target
+  it does not help (16 → 16), because the failures there are timeouts. The
+  filter changed the command in 4–10 % of steps. It costs the baselines
+  nothing in captures; PN takes longer on the static target (median 4.6 → 6.3 s).
+- **PN and pursuit capture 29–30 of 30 at 0.5 m/s.** The evaluator uses the
+  same `d2dtracker_interception.guidance` functions as the guidance node. In
+  the benchmark scene, with a 2.4 m/s circling target, the same PN law captures
+  4 of 19 (`drone_interception_sim/BENCHMARKS.md`), so its failure there depends
+  on target speed and geometry.
+- **Constant-speed PN (`pn_int`) overshoots:** it captures fast when it
+  captures (median 2.5 s) but leaves the arena in 10–17 episodes per target.
 
 ## Environment note
 
