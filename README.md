@@ -22,7 +22,7 @@ interception layer on top — the playground itself stays interception-free:
 | `aerogym_intercept/policy_head.py` | flies a trained policy in `drone_interception_sim`'s two-drone benchmark scene (`pipeline.launch.py orchestrator:=rl rl_model:=...`) |
 | `target_policy.py` | scripted target: `static` / `constant_velocity` / `evasive` (the curriculum axis) |
 | `scripts/eval_matrix.sh` | all curriculum models + PN + pursuit over targets and speeds, resumable CSV |
-| `scripts/speed_curriculum.sh` | evasive-target speed stages (1 → 2 → 3 m/s by default), best checkpoint per stage carried forward |
+| `scripts/curriculum.sh` | staged SAC curriculum (`target:speed` stages, e.g. `static:0 constant_velocity:0.5 evasive:0.5` or evasive speed stages), lockstep by default; keeps the best checkpoint per stage, selected on seed 100 (the evaluation matrix tests on seed 200) |
 | `scripts/plot_training.py` | learning curves from the SB3 train logs → `docs/figures/learning_curves.png` |
 | `tools/video_montage/` | record → replay (offscreen GPU camera) → captioned montage of the policy across checkpoints |
 
