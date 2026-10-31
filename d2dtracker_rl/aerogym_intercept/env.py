@@ -204,12 +204,14 @@ class InterceptEnv(BasePX4Env):
         if not self.target_ready:
             print(f'[intercept_env] target not at start after reset ({how}): '
                   f'{self._target_status(start)}', flush=True)
-            if self.sim is not None and self._target_escaped(start):
-                # a teleport cannot heal a diverged target estimator (observed
-                # after collisions: z estimate climbing past 270 m while armed
-                # in OFFBOARD); reboot both PX4s and reset again
-                print('[intercept_env] target estimator diverged: restarting '
-                      'the stack', flush=True)
+            if self.sim is not None:
+                # Neither failure heals in place: a diverged target estimator
+                # (z estimate climbing past 270 m while armed in OFFBOARD,
+                # after collisions) or a grounded target whose PX4 keeps
+                # refusing to arm. Reboot both PX4s and reset again.
+                why = ('estimator diverged' if self._target_escaped(start)
+                       else 'target will not take off')
+                print(f'[intercept_env] {why}: restarting the stack', flush=True)
                 self.sim.restart()
                 self._wait_stack_ready()
                 obs, info = super().reset(seed=seed, options=options)
