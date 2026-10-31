@@ -267,7 +267,7 @@ re-run with `--episode-steps 1100` (55 s), seed 200, 30 episodes (data:
 ### The whole matrix at 55 s (ROADMAP C10)
 
 All 13 policies again with `EPISODE_STEPS=1100` (55 s), seed 200, 30
-episodes per cell, on stack 2. 1170 episodes; 2 are excluded because the
+episodes per cell, on stack 2. 1170 episodes (the C11 models below were added later); 2 are excluded because the
 target was not at its start. The bracketed numbers are the captures made
 within 20 s in the same run (`analyze_eval.py --budget 20`). Data, table and
 figure: [`docs/eval/2026-10-31_lockstep_55s/`](docs/eval/2026-10-31_lockstep_55s/);
@@ -303,8 +303,8 @@ trajectories (18 MB) stay in `~/drone_interception_ws/rl_eval/2026-10-31_lockste
   270. The gap is widest at the evasive stage: `model_evasive_0.5` captures 10
   of 30 evasive targets and leaves the arena in 12, where `model_evasive_40k`
   captures 23. The June models trained on episodes of about 55 s, the retrain
-  on 20 s ones. ROADMAP C11 retrains the curriculum with 55 s episodes to test
-  whether that is the cause.
+  on 20 s ones. ROADMAP C11 retrained the curriculum with 55 s episodes to
+  test whether that is the cause: it is not (next section).
 - **Behind the CBF the June evasive model captures 28 of 30 evasive targets**
   (23 without; crash or out of bounds 6 → 1). Against the constant-velocity
   target it does worse with the filter (26 → 23), within the run-to-run
@@ -318,6 +318,45 @@ trajectories (18 MB) stay in `~/drone_interception_ws/rl_eval/2026-10-31_lockste
   runs give 173 and 206 of 270. So a difference of a few captures between two
   RL cells of one run is not a finding; the paper should pool runs or use more
   episodes per cell.
+
+### Retrained with 55 s episodes (ROADMAP C11)
+
+C9 again, with `EPISODE_STEPS=1100` for training and for checkpoint selection:
+`EPISODE_STEPS=1100 scripts/curriculum.sh checkpoints/lockstep_55s
+"static:0 constant_velocity:0.5 evasive:0.5" 40000`, from the June static
+model. The kept checkpoints scored 9/10, 8/10 and 8/10 on seed 100. Their
+test-seed episodes (55 s) are in the matrix above as `model_*_55s`
+(`episodes.csv` now holds 1530 episodes).
+
+Captures of 30 against the static / constant-velocity / evasive target, 55 s
+episodes:
+
+| stage | June (about 55 s, about 0.14 s per step) | C9 (20 s, 0.05 s) | C11 (55 s, 0.05 s) |
+|---|---|---|---|
+| static | 26 / 23 / 24 | 22 / 17 / 23 | 27 / 28 / 19 |
+| constant velocity | **30 / 28 / 26** | 29 / 27 / 20 | 20 / 15 / 12 |
+| evasive | 26 / 26 / 23 | 20 / 17 / 10 | 23 / 14 / 10 |
+| evasive + CBF | 27 / 23 / 28 | 20 of 29 / 16 / 15 | 22 / 23 / 13 |
+| all three stages, of 270 | **232** | 185 | 168 |
+
+- **Training on 55 s episodes does not reproduce the June models.** C11's
+  static stage matches June's (74 against 73 of 90 captures), but its
+  constant-velocity and evasive stages are worse than June's and C9's. Two
+  differences from June remain: the control period (about 0.14 s, so each June
+  training step covered 2.7 times the sim time) and the spread between
+  training runs, since each configuration here was trained once.
+- **The later stages fail by crashing.** The C11 constant-velocity and evasive
+  models crash in 11–18 of 30 episodes against the moving targets, lowest
+  altitude below 0 m.
+- **Ten selection episodes failed again:** the constant-velocity stage scored
+  8/10 on seed 100 and 15/30 on the test seed against the same target; the
+  evasive stage 8/10 and 10/30.
+- **Behind the CBF filter the C11 evasive model crashes less** (11 → 3 against
+  the constant-velocity target, 14 → 7 against the evasive one) and captures
+  23 instead of 14 constant-velocity targets, but still only 13 of 30 evasive
+  ones.
+- The June models stay the deliverables. The speed curriculum (C6) is being
+  redone from the June evasive model.
 
 ### Target-speed sweep at 55 s (ROADMAP C4)
 

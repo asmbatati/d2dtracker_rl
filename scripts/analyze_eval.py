@@ -161,9 +161,11 @@ def fig_speed(s, policies, path):
 
 def fig_targets(s, policies, path):
     targets = list(dict.fromkeys(s.target_policy))
-    fig, axes = plt.subplots(1, len(targets), figsize=(4.6 * len(targets), 3.6),
-                             sharey=True, squeeze=False)
-    for ax, tp in zip(axes[0], targets):
+    wide = len(policies) > 12   # then one target per row, so the labels fit
+    nrow, ncol = (len(targets), 1) if wide else (1, len(targets))
+    fig, axes = plt.subplots(nrow, ncol, sharey=True, squeeze=False,
+                             figsize=(max(4.6, 0.45 * len(policies)) * ncol, 3.6 * nrow))
+    for ax, tp in zip(axes.flat, targets):
         sub = s[s.target_policy == tp]
         sub = sub[sub.target_speed == sub.target_speed.min()].set_index('policy')
         for i, pol in enumerate(policies):
@@ -186,12 +188,13 @@ def fig_targets(s, policies, path):
                      fontsize=9, color=INK)
         ax.set_ylim(0, 1.15)
         style(ax)
-    axes[0][0].set_ylabel('capture rate (95 % Wilson CI)', fontsize=8, color=INK)
+    for ax in axes[:, 0]:
+        ax.set_ylabel('capture rate (95 % Wilson CI)', fontsize=8, color=INK)
     shown = sorted({family(p) for p in policies})
     fig.legend([plt.Rectangle((0, 0), 1, 1, color=SERIES[k]) for k in shown],
                [FAMILIES[k] for k in shown], fontsize=8, frameon=False,
                loc='upper center', ncol=len(shown))
-    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.07 / nrow))
     fig.savefig(path, dpi=200)
     plt.close(fig)
 
