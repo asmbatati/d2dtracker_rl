@@ -23,13 +23,14 @@
 # Isolation (shared machine): PAIR_RANK selects PX4 instances 2r/2r+1,
 # DOMAIN_BASE + 2*PAIR_RANK is the stack's ROS_DOMAIN_ID, RUN_ID names the gz
 # partition (aerogym_<RUN_ID>_<2r>). Defaults: rank 1 (instances 2,3),
-# domain 21, run id ihunter_eval.
+# domain 31 (the second stack, kept apart from training on domain 21), run id
+# ihunter_eval.
 set -u
 OUT=${1:?usage: eval_matrix.sh OUT_DIR [EPISODES] [SPEEDS]}
 EPS=${2:-30}
 SPEEDS=${3:-0.5}
 PAIR_RANK=${PAIR_RANK:-1}
-DOMAIN_BASE=${DOMAIN_BASE:-19}
+DOMAIN_BASE=${DOMAIN_BASE:-29}
 RUN_ID=${RUN_ID:-ihunter_eval}
 SEED=${SEED:-200}
 CBF=${CBF:-1}
