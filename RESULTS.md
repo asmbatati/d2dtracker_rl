@@ -179,10 +179,10 @@ Trajectories (8.6 MB) and per-cell logs stay on the lab desktop in
 Wilson intervals, capture times, closest approach, crashes and lowest altitude
 are in [`summary.md`](docs/eval/2026-10-31_lockstep/summary.md).
 
-- **The June models capture far less at the exact 0.05 s period:** 11–28 of 30,
-  against 9/10–10/10 in June at about 0.14 s per step. They were trained at a
-  longer, load-dependent period, so these numbers measure them away from their
-  training conditions. C9 retrains the curriculum in lockstep.
+- **The June models capture far less than they did in June:** 11–28 of 30, against
+  9/10–10/10 then. Retraining at the evaluation period (below) does not change
+  that; the shorter episode does most of it (20 s here, about 55 s in June; see
+  "Episode length is what changed").
 - **The constant-velocity model is the best RL policy on every target**
   (28, 23, 21 of 30). The evasive refine that followed it is worse on all three
   (18, 19, 16), so that stage did not help.
@@ -202,6 +202,70 @@ are in [`summary.md`](docs/eval/2026-10-31_lockstep/summary.md).
   on target speed and geometry.
 - **Constant-speed PN (`pn_int`) overshoots:** it captures fast when it
   captures (median 2.5 s) but leaves the arena in 10–17 episodes per target.
+
+### Retrained in lockstep (ROADMAP C9)
+
+The same curriculum and recipe, retrained with the exact 0.05 s period:
+`scripts/curriculum.sh checkpoints/lockstep "static:0 constant_velocity:0.5
+evasive:0.5" 40000`, from the June static model, each stage's checkpoint
+chosen on 10 episodes of seed 100. The kept 40 k checkpoints scored 8/10,
+10/10 and 7/10 there. On the test episodes (same matrix, same seed 200):
+
+| model (stage) | static | constant velocity | evasive |
+|---|---|---|---|
+| `model_static_0` (lockstep) | 17/30 | 17/30 | 12/30 |
+| `model_static_refine_40k` (June) | 19/29 | 18/30 | 11/30 |
+| `model_constant_velocity_0.5` (lockstep) | 22/30 | **26/30** | **22/30** |
+| `model_cv_40k` (June) | **28/30** | 23/30 | 21/30 |
+| `model_evasive_0.5` (lockstep) | 20/30 | 16/30 | 15/30 |
+| `model_evasive_40k` (June) | 18/29 | 19/30 | 16/30 |
+| `model_evasive_0.5` + CBF | 18/30 | 14/30 | 11/30 |
+| `model_evasive_40k` + CBF | 28/30 | 27/30 | 16/30 |
+
+- **Retraining at the evaluation period does not recover June's numbers.**
+  Each retrained model is within a few episodes of its June counterpart, and
+  the intervals overlap everywhere. So the mismatch in control period is not
+  what keeps the models well below June's 9–10 of 10.
+- **The constant-velocity stage is again the best,** and the evasive stage
+  again makes it worse on every target.
+- **10 selection episodes overestimate:** 10/10 and 7/10 on seed 100 became
+  26/30 and 15/30 on the test seed.
+- **The CBF filter does not rescue the retrained evasive model:** its crashes
+  become timeouts (16 and 18 of 30 against the moving targets), not captures.
+  For the June model it turned crashes into captures. So what the filter is
+  worth depends on the policy behind it; it is not a fixed gain.
+
+### Episode length is what changed
+
+An episode ends after 400 steps. At the exact 0.05 s period that is 20 s of
+sim time; in June, at about 0.137 s per step, it was about 55 s. Three cells
+re-run with `--episode-steps 1100` (55 s), seed 200, 30 episodes (data:
+[`docs/eval/2026-10-31_long_episodes/`](docs/eval/2026-10-31_long_episodes/)):
+
+| model vs target | captures, 20 s | captures, 55 s | of which after 20 s | timeouts 20 s → 55 s | crash or out of bounds 20 s → 55 s |
+|---|---|---|---|---|---|
+| June static model vs static | 19/29 | **27/30** | 6 | 10 → 1 | 0 → 2 |
+| June evasive model vs evasive | 16/30 | 20/30 | 4 | 10 → 1 | 4 → 9 |
+| lockstep static model vs evasive | 12/30 | 14/30 | 6 | 15 → 1 | 3 → 15 |
+
+- **Almost every timeout ends before 55 s:** against the static target as a
+  capture, against the evasive target often as a crash. The 20 s limit hides
+  those crashes.
+- **At June's episode length the June static model captures 27/30,** in line
+  with its June 9/10. So the drop in the matrix above comes mostly from the
+  shorter episode, not from the policies.
+- **The slow captures are slow:** 4–6 per cell needed more than 20 s (up to
+  51 s).
+- **Outcomes do not repeat episode by episode.** Lockstep fixes the control
+  period, but PX4 and Gazebo still run their own threads, and a longer episode
+  also changes the state the next reset starts from. Of the 16 episodes the
+  June evasive model captured in the 20 s run, 6 ended otherwise in the 55 s
+  run, where a deterministic repeat would have captured them at the same
+  time. Compare
+  rates between runs, not single episodes.
+
+The whole matrix is being re-run with 55 s episodes; capture times in that run
+give the 20 s rates as well.
 
 ## Environment note
 

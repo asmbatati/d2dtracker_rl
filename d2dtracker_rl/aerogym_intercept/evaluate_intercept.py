@@ -98,6 +98,8 @@ def main(args=None):
     p.add_argument('--step-mode', default='free', choices=['free', 'lockstep'],
                    help="'lockstep' holds the world paused between steps so the "
                         'control period is exactly control_dt')
+    p.add_argument('--episode-steps', type=int, default=None,
+                   help='episode length in steps (env default 400, i.e. 20 s in lockstep)')
     p.add_argument('--csv', default=None, help='append per-episode rows here')
     p.add_argument('--traj-dir', default=None, help='save per-episode .npz here')
     p.add_argument('--label', default=None,
@@ -111,6 +113,8 @@ def main(args=None):
         p.error('--model is required for --policy model')
 
     eval_cfg = {'target_policy': args.target_policy, 'step_mode': args.step_mode}
+    if args.episode_steps:
+        eval_cfg['episode_steps'] = args.episode_steps
     if args.target_policy in ('constant_velocity', 'evasive'):
         eval_cfg['target_policy_params'] = {'velocity': [args.target_speed, 0.0, 0.0]}
 

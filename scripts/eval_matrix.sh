@@ -12,6 +12,8 @@
 # OUT_DIR/traj/. Cells that already have EPISODES rows are skipped, so the
 # script can be re-run to resume. MODELS (names in CKPT_DIR, default the three
 # June models) and CBF_MODEL (default model_evasive_40k) select the policies.
+# EPISODE_STEPS sets the episode length (env default 400 steps = 20 s in
+# lockstep; 1100 = 55 s, about June's effective episode).
 #
 #   # lockstep-retrained models (C9) into the same matrix: baselines are skipped
 #   CKPT_DIR=checkpoints/lockstep CBF_MODEL=model_evasive_0.5 \
@@ -37,6 +39,7 @@ PKG=$(cd "$(dirname "$0")/.." && pwd)
 CK=${CKPT_DIR:-$PKG/checkpoints/intercept}
 MODELS=${MODELS:-model_static_refine_40k model_cv_40k model_evasive_40k}
 CBF_MODEL=${CBF_MODEL:-model_evasive_40k}
+EPISODE_STEPS=${EPISODE_STEPS:-}
 mkdir -p "$OUT/traj" "$OUT/logs"
 CSV=$OUT/episodes.csv
 
@@ -59,6 +62,7 @@ run_cell() {  # label target speed args...
     --seed "$SEED" --rank "$PAIR_RANK" --domain-base "$DOMAIN_BASE" \
     --speed-factor "$SPEED_FACTOR" --step-mode "$STEP_MODE" \
     --run-id "$RUN_ID" --csv "$CSV" --traj-dir "$OUT/traj" \
+    ${EPISODE_STEPS:+--episode-steps "$EPISODE_STEPS"} \
     > "$OUT/logs/${label}__${target}_${speed}.log" 2>&1
   tail -4 "$OUT/logs/${label}__${target}_${speed}.log" | sed 's/^/    /'
 }
