@@ -355,8 +355,8 @@ episodes:
   the constant-velocity target, 14 → 7 against the evasive one) and captures
   23 instead of 14 constant-velocity targets, but still only 13 of 30 evasive
   ones.
-- The June models stay the deliverables. The speed curriculum (C6) is being
-  redone from the June evasive model.
+- The June models stay the deliverables. The speed curriculum (C6) was redone
+  from the June evasive model (below).
 
 ### Target-speed sweep at 55 s (ROADMAP C4)
 
@@ -395,7 +395,50 @@ Captures of 30 (two cells have 29 valid episodes):
   evasive target from 2 m/s, almost all out of bounds.
 - The speed curriculum on 20 s episodes (ROADMAP C6) did not close this gap:
   its stage models captured 1, 0 and 0 of 10 at 1, 2 and 3 m/s on the
-  selection seed, staying 5–7 m from the target.
+  selection seed, staying 5–7 m from the target. The redo on 55 s episodes
+  follows.
+
+### Speed curriculum from the June evasive model (ROADMAP C6)
+
+The June `model_evasive_40k` fine-tuned against the evasive target at 1, then
+2, then 3 m/s: 60 k steps per stage, 55 s episodes, lockstep, each stage
+starting from the previous stage's kept checkpoint (selected on seed 100,
+10 episodes). Then the test seed (200), 30 episodes per cell, against the
+evasive target at 1–3 m/s on stack 2; the June models and the scripted laws
+are the C4 cells. 3 episodes are excluded because the target was not at its
+start. Data, table and figure:
+[`docs/eval/2026-11-01_speed_curriculum_55s/`](docs/eval/2026-11-01_speed_curriculum_55s/).
+
+![capture rate against target speed, evasive target](docs/eval/2026-11-01_speed_curriculum_55s/capture_vs_speed.png)
+
+Selection on seed 100 kept 9/10 at 1 m/s (40 k steps), 2/10 at 2 m/s (40 k)
+and 3/10 at 3 m/s (20 k). That misses the 8/10 at 2 m/s needed to re-run the
+benchmark-scene transfer (C5).
+
+Captures of 30 against the evasive target:
+
+| policy | 1 m/s | 2 m/s | 3 m/s |
+|---|---|---|---|
+| `model_evasive_40k` (June) | 23 | 11 | 9 |
+| `model_evasive_1.0` (stage 1) | 22 | 15 | 6 |
+| `model_evasive_2.0` (stage 2) | 14 | 11 | 2 of 29 |
+| `model_evasive_3.0` (stage 3) | 8 | 3 | 2 |
+| `model_cv_40k` (June) | 26 of 29 | 11 | 1 of 29 |
+| `pn` | 30 | 13 | 12 |
+| `pursuit` | 29 | **30** | **28** |
+
+- **The speed curriculum does not close the gap.** Stage 1 is level with the
+  June model: 22 against 23 at 1 m/s, 15 against 11 at 2 m/s (inside the 4–5
+  capture spread between RL runs), 6 against 9 at 3 m/s. The later stages lose
+  ground at every speed, including the speeds they trained on.
+- **They fail by running out of the arena:** 12–22 of 30 episodes per cell end
+  out of bounds at 2 and 3 m/s, and at 3 m/s the stage models stay a median
+  7–8.5 m from the target. Stage 3 also crashes in 17 of 30 episodes at 1 m/s.
+- **Pure pursuit captures 28–30 of 30 at every speed** in about 3 s; no
+  learned policy comes near it above 1 m/s.
+- Two C6 attempts have now failed (20 s episodes from the C9 model, 55 s
+  episodes from the June model). The June models stay the deliverables;
+  stage models are in `checkpoints/speed_55s/` (gitignored).
 
 ## Environment note
 
