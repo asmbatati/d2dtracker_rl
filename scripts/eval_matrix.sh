@@ -13,7 +13,8 @@
 # script can be re-run to resume. MODELS (names in CKPT_DIR, default the three
 # June models) and CBF_MODEL (default model_evasive_40k) select the policies.
 # EPISODE_STEPS sets the episode length (env default 400 steps = 20 s in
-# lockstep; 1100 = 55 s, about June's effective episode).
+# lockstep; 1100 = 55 s, about June's effective episode). TARGETS limits the
+# target policies (default "static constant_velocity evasive").
 #
 #   # lockstep-retrained models (C9) into the same matrix: baselines are skipped
 #   CKPT_DIR=checkpoints/lockstep CBF_MODEL=model_evasive_0.5 \
@@ -68,7 +69,7 @@ run_cell() {  # label target speed args...
   tail -4 "$OUT/logs/${label}__${target}_${speed}.log" | sed 's/^/    /'
 }
 
-for target in static constant_velocity evasive; do
+for target in ${TARGETS:-static constant_velocity evasive}; do
   if [ "$target" = static ]; then speeds=0; else speeds=$SPEEDS; fi
   for speed in $speeds; do
     for m in $MODELS; do
