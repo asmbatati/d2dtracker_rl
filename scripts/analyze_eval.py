@@ -137,7 +137,7 @@ def fig_speed(s, policies, path):
     moving = [tp for tp in dict.fromkeys(s.target_policy) if tp != 'static']
     if not moving or s[s.target_policy.isin(moving)].target_speed.nunique() < 2:
         return False
-    fig, axes = plt.subplots(1, len(moving), figsize=(4.2 * len(moving), 3.4),
+    fig, axes = plt.subplots(1, len(moving), figsize=(4.2 * len(moving) + 1.8, 3.4),
                              sharey=True, squeeze=False)
     for ax, tp in zip(axes[0], moving):
         sub = s[s.target_policy == tp]
@@ -149,10 +149,12 @@ def fig_speed(s, policies, path):
                     linewidth=2, marker='o', markersize=5, label=pol)
         ax.set_title(tp.replace('_', ' '), fontsize=9, color=INK)
         ax.set_xlabel('target speed (m/s)', fontsize=8, color=INK)
+        ax.set_xticks(sorted(sub.target_speed.unique()))
         ax.set_ylim(-0.05, 1.05)
         style(ax)
     axes[0][0].set_ylabel('capture rate', fontsize=8, color=INK)
-    axes[0][-1].legend(fontsize=7, frameon=False, loc='lower left')
+    axes[0][-1].legend(fontsize=7, frameon=False, loc='center left',
+                       bbox_to_anchor=(1.02, 0.5))   # outside: 5+ lines cross
     fig.tight_layout()
     fig.savefig(path, dpi=200)
     plt.close(fig)
